@@ -7,7 +7,8 @@
 #include "data/saves/SaveData.hpp"
 #include "data/titles/Title.hpp"
 
-class ISaveDataAccessor {
+class ISaveDataAccessor
+{
 public:
     PU_SMART_CTOR(ISaveDataAccessor)
 
@@ -27,6 +28,12 @@ public:
 
     // Save any changes to the current save
     virtual bool saveChanges() = 0;
+
+    // get last error message from save/loads
+    virtual std::string getLastError() const = 0;
+
+    // mark the save 'dirty' for the current save
+    virtual void markUnsavedChanges() = 0;
 
     // Check if there are unsaved changes
     virtual bool hasUnsavedChanges() const = 0;

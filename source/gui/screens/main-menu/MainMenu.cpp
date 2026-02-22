@@ -2,6 +2,7 @@
 
 #include "gui/screens/main-menu/sub-components/menu-grid/MenuButtonGrid.hpp"
 #include "utils/Logger.hpp"
+#include "utils/NotificationManager.hpp"
 
 namespace pksm::layout {
 
@@ -85,6 +86,7 @@ MainMenu::MainMenu(
     // Set initial help items
     std::vector<pksm::ui::HelpItem> helpItems = {
         {{{pksm::ui::global::ButtonGlyph::A}}, "Select"},
+        {{{pksm::ui::global::ButtonGlyph::Y}}, "Save"},
         {{{pksm::ui::global::ButtonGlyph::B}}, "Back to Game Selection"},
         {{{pksm::ui::global::ButtonGlyph::Minus}}, "Help"}
     };
@@ -98,6 +100,38 @@ MainMenu::MainMenu(
             LOG_DEBUG("B button pressed, returning to game selection");
             if (this->onBack) {
                 this->onBack();
+            }
+        }
+    );
+
+    buttonHandler.RegisterButton(
+        HidNpadButton_Y,
+        nullptr,
+        [this]() {
+            if (!this->saveDataAccessor) {
+                pksm::utils::NotificationManager::Push("Save Failed", "No save accessor available.");
+                return;
+            }
+
+            if (!this->saveDataAccessor->getCurrentSaveData()) {
+                pksm::utils::NotificationManager::Push("Save Failed", "No save loaded.");
+                return;
+            }
+
+            if (!this->saveDataAccessor->hasUnsavedChanges()) {
+                pksm::utils::NotificationManager::Push("Save", "No changes to save.");
+                return;
+            }
+
+            if (this->saveDataAccessor->saveChanges()) {
+                pksm::utils::NotificationManager::Push("Save", "Changes saved successfully.");
+            } else {
+                const auto err = this->saveDataAccessor->getLastError();
+                if (!err.empty()) {
+                    pksm::utils::NotificationManager::Push("Save Failed", err);
+                } else {
+                    pksm::utils::NotificationManager::Push("Save Failed", "Failed to save changes.");
+                }
             }
         }
     );

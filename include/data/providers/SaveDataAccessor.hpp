@@ -11,38 +11,44 @@
 
 using namespace pksm;
 
-class SaveDataAccessor : public ISaveDataAccessor {
+class SaveDataAccessor : public ISaveDataAccessor
+{
 private:
     pksm::saves::SaveData::Ref currentSave;
     std::function<void(pksm::saves::SaveData::Ref)> onSaveDataChanged;
     bool hasChanges;
+    std::string lastError;
+    std::string currentSavePath;
     AccountUid currentUserId;
 
     // Load actual save data from file
     pksm::saves::SaveData::Ref LoadSaveDataFromFile(
-        const pksm::titles::Title::Ref& title,
-        const std::string& saveName
-    ) const;
+        const pksm::titles::Title::Ref &title,
+        const std::string &saveName) const;
 
 public:
     explicit SaveDataAccessor(AccountUid currentUserId);
     virtual ~SaveDataAccessor() = default;
 
-    void SetCurrentUser(AccountUid userId) { 
-        LOG_DEBUG("SaveDataAccessor: Changing user ID from " + std::to_string(currentUserId.uid[1]) + 
+    void SetCurrentUser(AccountUid userId)
+    {
+        LOG_DEBUG("[SaveDataAccessor] Changing user ID from " + std::to_string(currentUserId.uid[1]) +
                   " to " + std::to_string(userId.uid[1]));
-        currentUserId = userId; 
+        currentUserId = userId;
     }
 
-    // Unmount save device if mounted
+    // unmount save device
     void unmountSaveDevice() override;
 
     // ISaveDataAccessor interface implementation
     pksm::saves::SaveData::Ref getCurrentSaveData() const override;
     bool loadSave(const pksm::titles::Title::Ref title, const std::string saveName) override;
-    void setOnSaveDataChanged(std::function<void(pksm::saves::SaveData::Ref)> callback) override {
+    void setOnSaveDataChanged(std::function<void(pksm::saves::SaveData::Ref)> callback) override
+    {
         onSaveDataChanged = callback;
     }
     bool saveChanges() override;
+    std::string getLastError() const override;
+    void markUnsavedChanges() override;
     bool hasUnsavedChanges() const override;
 };

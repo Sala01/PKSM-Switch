@@ -1,8 +1,12 @@
 #include "data/providers/SaveDataAccessor.hpp"
 
 #include <algorithm>
+#include <cerrno>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 
@@ -175,7 +179,7 @@ pksm::saves::GameVersion ToAppGameVersion(pksm::GameVersion version) {
 }  // namespace
 
 SaveDataAccessor::SaveDataAccessor(AccountUid currentUserId)
-  : currentSave(nullptr), hasChanges(false), currentUserId(currentUserId) {}
+  : currentSave(nullptr), hasChanges(false), lastError(""), currentSavePath(""), currentUserId(currentUserId) {}
 
 void SaveDataAccessor::unmountSaveDevice() {
     LOG_DEBUG("Unmounting save device");
@@ -206,6 +210,9 @@ bool SaveDataAccessor::loadSave(const pksm::titles::Title::Ref title, const std:
 
     currentSave = loaded;
     hasChanges = false;
+    lastError.clear();
+    const bool isSaveDevicePath = saveName.rfind("save:/", 0) == 0;
+    currentSavePath = isSaveDevicePath ? saveName : (std::string("save:/") + saveName);
 
     if (onSaveDataChanged) {
         onSaveDataChanged(currentSave);
@@ -215,16 +222,206 @@ bool SaveDataAccessor::loadSave(const pksm::titles::Title::Ref title, const std:
 }
 
 bool SaveDataAccessor::saveChanges() {
+    lastError.clear();
+
     if (!currentSave) {
-        LOG_ERROR("No save data to save");
+        lastError = "No save data to save";
+        LOG_ERROR(lastError);
         return false;
     }
 
-    // TODO: Implement actual save writing using PKSM-Core
-    // for now, just mark as saved
-    hasChanges = false;
-    LOG_DEBUG("Save changes requested (not fully implemented)");
-    return true;
+    const auto savePath = !currentSavePath.empty() ? currentSavePath : currentSave->getName();
+    const bool isSaveDevicePath = savePath.rfind("save:", 0) == 0;
+    if (!isSaveDevicePath) {
+        lastError = "Refusing to write save changes to a non-save device path: " + savePath;
+        LOG_ERROR(lastError);
+        return false;
+    }
+
+    try {
+        std::ifstream in(savePath, std::ios::binary | std::ios::ate);
+        if (!in.good()) {
+            lastError = "Failed to open save file: " + savePath;
+            LOG_ERROR(lastError);
+            return false;
+        }
+
+        const std::streamsize file_size = in.tellg();
+        if (file_size <= 0) {
+            lastError = "Invalid save file size: " + savePath;
+            LOG_ERROR(lastError);
+            return false;
+        }
+
+        in.seekg(0, std::ios::beg);
+
+        std::vector<u8> buffer_vec;
+        buffer_vec.resize(static_cast<size_t>(file_size));
+        if (!in.read(reinterpret_cast<char*>(buffer_vec.data()), file_size)) {
+            lastError = "Failed to read save file for writing: " + savePath;
+            LOG_ERROR(lastError);
+            return false;
+        }
+
+        in.close();
+
+        auto buffer = std::shared_ptr<u8[]>(new u8[static_cast<size_t>(file_size)], std::default_delete<u8[]>());
+        std::copy(buffer_vec.begin(), buffer_vec.end(), buffer.get());
+
+        auto sav = pksm::Sav::getSave(buffer, static_cast<size_t>(file_size));
+        if (!sav) {
+            lastError = "PKSM-Core could not detect a valid save type for: " + savePath;
+            LOG_ERROR(lastError);
+            return false;
+        }
+
+        sav->beginEditing();
+
+        const auto bag_items = currentSave->getBagItems();
+        const auto pouches = sav->pouches();
+
+        std::map<pksm::Sav::Pouch, int> pouch_slot_counts;
+        for (const auto &pouch_info : pouches) {
+            pouch_slot_counts[pouch_info.first] = pouch_info.second;
+        }
+
+        for (const auto &pouch_info : pouches) {
+            const auto pouch = pouch_info.first;
+            const auto slot_count = pouch_info.second;
+            for (int slot = 0; slot < slot_count; slot++) {
+                auto it = sav->item(pouch, static_cast<u16>(slot));
+                if (!it) {
+                    continue;
+                }
+                it->id(0);
+                it->count(0);
+                sav->item(*it, pouch, static_cast<u16>(slot));
+            }
+        }
+
+        auto toSavPouch = [](const pksm::saves::BagPouch pouch) -> std::optional<pksm::Sav::Pouch> {
+            using AP = pksm::saves::BagPouch;
+            using SP = pksm::Sav::Pouch;
+            switch (pouch) {
+                case AP::NormalItem:
+                    return SP::NormalItem;
+                case AP::KeyItem:
+                    return SP::KeyItem;
+                case AP::TM:
+                    return SP::TM;
+                case AP::Mail:
+                    return SP::Mail;
+                case AP::Medicine:
+                    return SP::Medicine;
+                case AP::Berry:
+                    return SP::Berry;
+                case AP::Ball:
+                    return SP::Ball;
+                case AP::Battle:
+                    return SP::Battle;
+                case AP::Candy:
+                    return SP::Candy;
+                case AP::ZCrystals:
+                    return SP::ZCrystals;
+                case AP::Treasure:
+                    return SP::Treasure;
+                case AP::Ingredient:
+                    return SP::Ingredient;
+                case AP::PCItem:
+                    return SP::PCItem;
+                case AP::RotomPower:
+                    return SP::RotomPower;
+                case AP::CatchingItem:
+                    return SP::CatchingItem;
+                case AP::Unknown:
+                default:
+                    return std::nullopt;
+            }
+        };
+
+        std::map<pksm::Sav::Pouch, int> next_slot;
+        for (const auto &it : bag_items) {
+            if ((it.itemId == 0) || (it.count == 0)) {
+                continue;
+            }
+
+            const auto sav_pouch_opt = toSavPouch(it.pouch);
+            if (!sav_pouch_opt) {
+                continue;
+            }
+            const auto sav_pouch = *sav_pouch_opt;
+
+            const auto slot_count_it = pouch_slot_counts.find(sav_pouch);
+            if (slot_count_it == pouch_slot_counts.end()) {
+                continue;
+            }
+
+            const int slot_count = slot_count_it->second;
+            const int slot = next_slot[sav_pouch]++;
+            if (slot >= slot_count) {
+                LOG_WARNING("Bag pouch full, skipping item ID " + std::to_string(it.itemId));
+                continue;
+            }
+
+            auto item = sav->item(sav_pouch, static_cast<u16>(slot));
+            if (!item) {
+                continue;
+            }
+
+            item->id(it.itemId);
+            item->count(it.count);
+            sav->item(*item, sav_pouch, static_cast<u16>(slot));
+        }
+
+        sav->finishEditing();
+
+        const size_t out_size = static_cast<size_t>(sav->getEntireLengthIncludingFooter());
+        if (out_size != static_cast<size_t>(file_size)) {
+            LOG_WARNING("Save size changed after editing. Input size = " + std::to_string(file_size) + ", output size = " + std::to_string(out_size));
+        }
+
+        std::ofstream out(savePath, std::ios::binary | std::ios::trunc);
+        if (!out.good()) {
+            lastError = "Failed to open save file for writing: " + savePath + " (errno " + std::to_string(errno) + ": " + std::string(std::strerror(errno)) + ")";
+            LOG_ERROR(lastError);
+            return false;
+        }
+
+        out.write(reinterpret_cast<const char*>(sav->rawData().get()), static_cast<std::streamsize>(out_size));
+        if (!out.good()) {
+            lastError = "Failed to write save file: " + savePath + " (errno " + std::to_string(errno) + ": " + std::string(std::strerror(errno)) + ")";
+            LOG_ERROR(lastError);
+            return false;
+        }
+        out.flush();
+        out.close();
+
+        const Result commit_rc = fsdevCommitDevice("save");
+        if (R_FAILED(commit_rc)) {
+            std::stringstream hexStream;
+            hexStream << std::hex << commit_rc;
+            lastError = "Failed to commit save device: " + std::to_string(commit_rc) + " (0x" + hexStream.str() + ")";
+            LOG_ERROR(lastError);
+            return false;
+        }
+
+        hasChanges = false;
+        lastError.clear();
+        LOG_DEBUG("Successfully saved changes to: " + savePath);
+        return true;
+    } catch (const std::exception &e) {
+        lastError = std::string("SaveChanges failed: ") + e.what();
+        LOG_ERROR(lastError);
+        return false;
+    }
+}
+
+std::string SaveDataAccessor::getLastError() const {
+    return lastError;
+}
+
+void SaveDataAccessor::markUnsavedChanges() {
+    hasChanges = true;
 }
 
 bool SaveDataAccessor::hasUnsavedChanges() const {
@@ -239,8 +436,9 @@ pksm::saves::SaveData::Ref SaveDataAccessor::LoadSaveDataFromFile(
         return nullptr;
     }
 
-    const bool isSaveDevicePath = saveName.rfind("save:/", 0) == 0;
-    const std::string savePath = isSaveDevicePath ? saveName : (std::string("save:/") + saveName);
+    const bool isSaveDevicePathArg = saveName.rfind("save:/", 0) == 0;
+    const std::string savePath = isSaveDevicePathArg ? saveName : (std::string("save:/") + saveName);
+    const bool isSaveDevicePath = savePath.rfind("save:/", 0) == 0;
 
     if (isSaveDevicePath) {
         LOG_DEBUG("Mounting save data for title ID: " + std::to_string(title->getTitleId()) + 

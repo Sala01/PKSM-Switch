@@ -361,6 +361,22 @@ void BagScreen::CreateItemControls() {
     decreaseButton->SetOnClick([this]() {
         if (currentItemQuantity > 0) {
             currentItemQuantity--;
+
+            auto saveData = this->saveDataAccessor ? this->saveDataAccessor->getCurrentSaveData() : nullptr;
+            if (saveData && itemList && !currentItemMap.empty()) {
+                const auto sel = itemList->GetSelectedIndex();
+                if ((sel >= 0) && (static_cast<size_t>(sel) < currentItemMap.size())) {
+                    const auto bag_idx = currentItemMap.at(static_cast<size_t>(sel));
+                    const auto &items = saveData->getBagItems();
+                    if (bag_idx < items.size()) {
+                        auto updated = items;
+                        updated.at(bag_idx).count = currentItemQuantity;
+                        saveData->setBagItems(std::move(updated));
+                        this->saveDataAccessor->markUnsavedChanges();
+                    }
+                }
+            }
+
             UpdateItemDisplay();
         }
     });
@@ -390,6 +406,22 @@ void BagScreen::CreateItemControls() {
     increaseButton->SetContentColor(pksm::ui::global::TEXT_WHITE);
     increaseButton->SetOnClick([this]() {
         currentItemQuantity++;
+
+        auto saveData = this->saveDataAccessor ? this->saveDataAccessor->getCurrentSaveData() : nullptr;
+        if (saveData && itemList && !currentItemMap.empty()) {
+            const auto sel = itemList->GetSelectedIndex();
+            if ((sel >= 0) && (static_cast<size_t>(sel) < currentItemMap.size())) {
+                const auto bag_idx = currentItemMap.at(static_cast<size_t>(sel));
+                const auto &items = saveData->getBagItems();
+                if (bag_idx < items.size()) {
+                    auto updated = items;
+                    updated.at(bag_idx).count = currentItemQuantity;
+                    saveData->setBagItems(std::move(updated));
+                    this->saveDataAccessor->markUnsavedChanges();
+                }
+            }
+        }
+
         UpdateItemDisplay();
     });
     increaseButton->SetVisible(false);
@@ -524,11 +556,7 @@ void BagScreen::RefreshItemListForCurrentCategory() {
 }
 
 void BagScreen::UpdateItemDisplay() {
-    using BP = pksm::saves::BagPouch;
-
-    if (!this->saveDataAccessor) {
-        itemNameText->SetText("No save loaded");
-        itemQuantityText->SetText("x0");
+    if (!saveDataAccessor) {
         return;
     }
 
@@ -562,7 +590,9 @@ void BagScreen::UpdateItemDisplay() {
     }
 
     const auto &cur = items.at(bag_idx);
+
     currentItemQuantity = cur.count;
+
     itemQuantityText->SetText("x" + std::to_string(currentItemQuantity));
 }
 
