@@ -124,7 +124,15 @@ void PokemonSummaryOverlay::Rebuild() {
     const auto lang = pksm::Language::ENG;
 
     // ensure i18n tables are initialized
-    i18n::init(lang);
+    static bool i18n_inited = false;
+    if (!i18n_inited) {
+        i18n::init(lang);
+        i18n_inited = true;
+    }
+
+    static const std::string heavyFont = pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON);
+    static const std::string mediumFont = pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON);
+    static const std::string switchBtnFont = pksm::ui::global::MakeSwitchButtonFontName(pksm::ui::global::FONT_SIZE_BUTTON);
 
     auto shadow = pu::ui::elm::Rectangle::New(PANEL_X + 10, PANEL_Y + 14, PANEL_W, PANEL_H, SHADOW, PANEL_RADIUS);
     this->Add(shadow);
@@ -156,19 +164,19 @@ void PokemonSummaryOverlay::Rebuild() {
 
     auto titleLeftText = pu::ui::elm::TextBlock::New(PANEL_X + 70, PANEL_Y + 16, titleLeft);
     titleLeftText->SetColor(pu::ui::Color(255, 255, 255, 255));
-    titleLeftText->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+    titleLeftText->SetFont(heavyFont);
     this->Add(titleLeftText);
 
     auto titleMidText = pu::ui::elm::TextBlock::New(0, 0, titleMid);
     titleMidText->SetColor(pu::ui::Color(255, 255, 255, 255));
-    titleMidText->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+    titleMidText->SetFont(heavyFont);
     titleMidText->SetX(PANEL_X + 420);
     titleMidText->SetY(PANEL_Y + 16);
     this->Add(titleMidText);
 
     auto titleRightText = pu::ui::elm::TextBlock::New(0, 0, titleRight);
     titleRightText->SetColor(pu::ui::Color(255, 255, 255, 255));
-    titleRightText->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+    titleRightText->SetFont(heavyFont);
     const pu::i32 titleRightX = PANEL_X + PANEL_W - PAD - titleRightText->GetWidth();
     titleRightText->SetX(titleRightX);
     titleRightText->SetY(PANEL_Y + 16);
@@ -180,13 +188,13 @@ void PokemonSummaryOverlay::Rebuild() {
     auto addPair = [&](const pu::i32 x, pu::i32 &y, const std::string &label, const std::string &value) {
         auto lbl = pu::ui::elm::TextBlock::New(x, y, label);
         lbl->SetColor(TEXT_DARK);
-        lbl->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+        lbl->SetFont(heavyFont);
         this->Add(lbl);
 
         const pu::i32 valX = x + LABEL_W;
         auto val = pu::ui::elm::TextBlock::New(valX, y, value);
         val->SetColor(TEXT_DARK);
-        val->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+        val->SetFont(mediumFont);
         this->Add(val);
 
         y += std::max(lbl->GetHeight(), val->GetHeight()) + ROW_GAP;
@@ -224,13 +232,13 @@ void PokemonSummaryOverlay::Rebuild() {
     {
         auto lbl = pu::ui::elm::TextBlock::New(leftX, leftY, "Type");
         lbl->SetColor(TEXT_DARK);
-        lbl->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+        lbl->SetFont(heavyFont);
         this->Add(lbl);
 
         auto makeChip = [&](const pu::i32 x, const pu::i32 y, const std::string &text, const pu::ui::Color &bgColor) {
             auto tb = pu::ui::elm::TextBlock::New(0, 0, text);
             tb->SetColor(pu::ui::Color(255, 255, 255, 255));
-            tb->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+            tb->SetFont(heavyFont);
             const pu::i32 w = tb->GetWidth() + 28;
             const pu::i32 h = tb->GetHeight() + 10;
             auto bg = pu::ui::elm::Rectangle::New(x, y, w, h, bgColor, h / 2);
@@ -268,7 +276,7 @@ void PokemonSummaryOverlay::Rebuild() {
 
     auto statsHeader = pu::ui::elm::TextBlock::New(statsBoxX + 6, statsBoxY, "Stats (IV / EV / Stat)");
     statsHeader->SetColor(TEXT_DARK);
-    statsHeader->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+    statsHeader->SetFont(heavyFont);
     this->Add(statsHeader);
 
     const pu::i32 colIV = statsBoxX + 250;
@@ -277,22 +285,22 @@ void PokemonSummaryOverlay::Rebuild() {
     auto addStatRow = [&](pu::i32 &y, const std::string &label, const pu::ui::Color &labelColor, const pksm::Stat st) {
         auto lbl = pu::ui::elm::TextBlock::New(statsBoxX + 16, y, label);
         lbl->SetColor(labelColor);
-        lbl->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+        lbl->SetFont(heavyFont);
         this->Add(lbl);
 
         auto ivT = pu::ui::elm::TextBlock::New(colIV, y, std::to_string(this->pk->iv(st)));
         ivT->SetColor(TEXT_DARK);
-        ivT->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+        ivT->SetFont(heavyFont);
         this->Add(ivT);
 
         auto evT = pu::ui::elm::TextBlock::New(colEV, y, std::to_string(this->pk->ev(st)));
         evT->SetColor(TEXT_DARK);
-        evT->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+        evT->SetFont(heavyFont);
         this->Add(evT);
 
         auto stT = pu::ui::elm::TextBlock::New(colST, y, std::to_string(this->pk->stat(st)));
         stT->SetColor(TEXT_DARK);
-        stT->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+        stT->SetFont(heavyFont);
         this->Add(stT);
 
         y += std::max({lbl->GetHeight(), ivT->GetHeight(), evT->GetHeight(), stT->GetHeight()}) + 10;
@@ -310,7 +318,7 @@ void PokemonSummaryOverlay::Rebuild() {
     const pu::i32 movesBoxY = statsBoxY + statsBoxH + 20;
     auto movesHeader = pu::ui::elm::TextBlock::New(movesBoxX + 6, movesBoxY, "Moves");
     movesHeader->SetColor(TEXT_DARK);
-    movesHeader->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+    movesHeader->SetFont(heavyFont);
     this->Add(movesHeader);
 
     pu::i32 mvY = movesBoxY + 36;
@@ -318,19 +326,19 @@ void PokemonSummaryOverlay::Rebuild() {
         const auto mv = this->pk->move(static_cast<u8>(i));
         auto bullet = pu::ui::elm::TextBlock::New(movesBoxX + 6, mvY, "-");
         bullet->SetColor(TEXT_DARK);
-        bullet->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+        bullet->SetFont(heavyFont);
         this->Add(bullet);
 
         auto mvText = pu::ui::elm::TextBlock::New(movesBoxX + 30, mvY, LocalizeMove(lang, mv));
         mvText->SetColor(TEXT_DARK);
-        mvText->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+        mvText->SetFont(heavyFont);
         this->Add(mvText);
         mvY += mvText->GetHeight() + 12;
     }
 
     auto hint = pu::ui::elm::TextBlock::New(PANEL_X + PANEL_W - 260, PANEL_Y + PANEL_H - 54, "B  Back");
     hint->SetColor(TEXT_DARK);
-    hint->SetFont(pksm::ui::global::MakeSwitchButtonFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+    hint->SetFont(switchBtnFont);
     this->Add(hint);
 }
 

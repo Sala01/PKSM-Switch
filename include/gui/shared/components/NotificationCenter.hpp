@@ -4,6 +4,7 @@
 #include <deque>
 #include <pu/Plutonium>
 #include <string>
+#include <vector>
 
 #include "utils/NotificationManager.hpp"
 
@@ -18,6 +19,10 @@ namespace pksm::ui
             std::string title;
             std::string body;
             std::chrono::steady_clock::time_point created;
+            std::vector<std::string> wrapped_body;
+            pu::ui::elm::TextBlock::Ref title_tb;
+            std::vector<pu::ui::elm::TextBlock::Ref> body_tbs;
+            pu::i32 computed_height = 0;
         };
 
         pu::i32 x;
