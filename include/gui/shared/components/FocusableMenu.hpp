@@ -8,67 +8,79 @@
 #include "input/directional/DirectionalInputHandler.hpp"
 #include "input/visual-feedback/interfaces/IFocusable.hpp"
 
-namespace pksm::ui {
-class FocusableMenu : public pu::ui::elm::Menu, public IFocusable, public ShakeableWithOutline {
-private:
-    bool focused;
-    int lastPosition;  // Stores position when unfocusing
-    std::vector<std::string> currentDataSource;  // Owns the current data source
-    pksm::input::DirectionalInputHandler inputHandler;  // Handles directional input
-    pksm::input::ButtonInputHandler buttonHandler;  // Handles button input
-    bool disabled;  // Whether the menu is disabled (ignores input)
+namespace pksm::ui
+{
+    enum class FocusExitDirection
+    {
+        Up,
+        Down,
+        Left,
+        Right,
+    };
 
-protected:
-    std::function<void()> onTouchSelectCallback;
-    std::function<void()> onSelectCallback;
-    std::function<void()> onCancelCallback;
+    class FocusableMenu : public pu::ui::elm::Menu, public IFocusable, public ShakeableWithOutline
+    {
+    private:
+        bool focused;
+        int lastPosition; // Stores position when unfocusing
 
-public:
-    FocusableMenu(
-        const pu::i32 x,
-        const pu::i32 y,
-        const pu::i32 width,
-        const pu::ui::Color items_clr,
-        const pu::ui::Color items_focus_clr,
-        const pu::i32 items_height,
-        const u32 items_to_show
-    );
-    PU_SMART_CTOR(FocusableMenu)
+        std::vector<std::string> currentDataSource;        // Owns the current data source
+        pksm::input::DirectionalInputHandler inputHandler; // Handles directional input
+        pksm::input::ButtonInputHandler buttonHandler;     // Handles button input
+        bool disabled;                                     // Whether the menu is disabled (ignores input)
 
-    void OnRender(pu::ui::render::Renderer::Ref& drawer, const pu::i32 x, const pu::i32 y) override;
-    void
-    OnInput(const u64 keys_down, const u64 keys_up, const u64 keys_held, const pu::ui::TouchPoint touch_pos) override;
+    protected:
+        std::function<void()> onTouchSelectCallback;
+        std::function<void()> onSelectCallback;
+        std::function<void()> onCancelCallback;
+        std::function<void(FocusExitDirection)> onFocusExitCallback;
 
-    // IFocusable implementation
-    void SetFocused(bool focused) override;
-    bool IsFocused() const override;
+    public:
+        FocusableMenu(
+            const pu::i32 x,
+            const pu::i32 y,
+            const pu::i32 width,
+            const pu::ui::Color items_clr,
+            const pu::ui::Color items_focus_clr,
+            const pu::i32 items_height,
+            const u32 items_to_show);
+        PU_SMART_CTOR(FocusableMenu)
 
-    // Data source management
-    void SetDataSource(const std::vector<std::string>& items);
-    const std::vector<std::string>& GetDataSource() const;
+        void OnRender(pu::ui::render::Renderer::Ref &drawer, const pu::i32 x, const pu::i32 y) override;
+        void
+        OnInput(const u64 keys_down, const u64 keys_up, const u64 keys_held, const pu::ui::TouchPoint touch_pos) override;
 
-    // Touch selection callback
-    void SetOnTouchSelect(std::function<void()> callback) { onTouchSelectCallback = callback; }
-    void SetOnSelect(std::function<void()> callback) { onSelectCallback = callback; }
-    void SetOnCancel(std::function<void()> callback) { onCancelCallback = callback; }
-    std::string GetSelectedItemText() const;
+        // IFocusable implementation
+        void SetFocused(bool focused) override;
+        bool IsFocused() const override;
 
-    // Const-correct version of GetSelectedIndex
-    pu::i32 GetSelectedIndex() const { return Menu::selected_item_idx; }
-    bool ShouldResignUpFocus() const { return GetSelectedIndex() <= 0; }
+        // Data source management
+        void SetDataSource(const std::vector<std::string> &items);
+        const std::vector<std::string> &GetDataSource() const;
 
-    // Disable/enable the menu (affects input handling only)
-    void SetDisabled(bool disabled);
-    bool IsDisabled() const;
+        // Touch selection callback
+        void SetOnTouchSelect(std::function<void()> callback) { onTouchSelectCallback = callback; }
+        void SetOnSelect(std::function<void()> callback) { onSelectCallback = callback; }
+        void SetOnCancel(std::function<void()> callback) { onCancelCallback = callback; }
+        void SetOnFocusExit(std::function<void(FocusExitDirection)> callback) { onFocusExitCallback = callback; }
+        std::string GetSelectedItemText() const;
 
-private:
-    // Position management methods
-    void StorePosition();
-    void RestorePosition();
-    void ResetPosition();  // Called when data source changes
+        // Const-correct version of GetSelectedIndex
+        pu::i32 GetSelectedIndex() const { return Menu::selected_item_idx; }
+        bool ShouldResignUpFocus() const { return GetSelectedIndex() <= 0; }
 
-    // Movement methods
-    void MoveUp();
-    void MoveDown();
-};
-}  // namespace pksm::ui
+        // Disable/enable the menu (affects input handling only)
+        void SetDisabled(bool disabled);
+        bool IsDisabled() const;
+
+    private:
+        // Position management methods
+        void StorePosition();
+        void RestorePosition();
+        void ResetPosition(); // Called when data source changes
+
+        // Movement methods
+        void MoveUp();
+        void MoveDown();
+    };
+} // namespace pksm::ui

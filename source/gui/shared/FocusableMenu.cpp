@@ -93,6 +93,11 @@ void pksm::ui::FocusableMenu::OnInput(
 void pksm::ui::FocusableMenu::MoveUp() {
     if (!ShouldResignUpFocus()) {
         this->SetSelectedIndex(this->GetSelectedIndex() - 1);
+        return;
+    }
+
+    if (onFocusExitCallback) {
+        onFocusExitCallback(FocusExitDirection::Up);
     }
 }
 
@@ -100,6 +105,10 @@ void pksm::ui::FocusableMenu::MoveDown() {
     if (!this->GetItems().empty()) {
         size_t nextIndex = this->GetSelectedIndex() + 1;
         if (nextIndex >= this->GetItems().size()) {
+            if (onFocusExitCallback) {
+                onFocusExitCallback(FocusExitDirection::Down);
+                return;
+            }
             nextIndex = 0;  // Wrap around to top
         }
         this->SetSelectedIndex(nextIndex);

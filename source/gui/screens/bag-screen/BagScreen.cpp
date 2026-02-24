@@ -49,10 +49,86 @@ BagScreen::BagScreen(
 
     InitializeHelpFooter();
 
-    buttonHandler.RegisterButton(HidNpadButton_B, nullptr, [this]() {
-        LOG_DEBUG("B button pressed, returning to main menu");
-        if (this->onBack) {
-            this->onBack();
+    directionalHandler.SetOnMoveDown([this]() {
+        auto currentFocused = bagScreenFocusManager ? bagScreenFocusManager->GetFocusedElement() : nullptr;
+        if (!currentFocused) {
+            return;
+        }
+
+        if (currentCategory == -1) {
+            for (size_t i = 0; i < categoryButtons.size(); i++) {
+                if (categoryButtons[i] == currentFocused && i + 1 < categoryButtons.size()) {
+                    categoryButtons[i + 1]->RequestFocus();
+                    break;
+                }
+            }
+        } else {
+            if (currentFocused == decreaseButton) {
+                increaseButton->RequestFocus();
+            } else if (currentFocused == increaseButton) {
+                backButton->RequestFocus();
+            }
+        }
+    });
+
+    directionalHandler.SetOnMoveUp([this]() {
+        auto currentFocused = bagScreenFocusManager ? bagScreenFocusManager->GetFocusedElement() : nullptr;
+        if (!currentFocused) {
+            return;
+        }
+
+        if (currentCategory == -1) {
+            for (size_t i = 0; i < categoryButtons.size(); i++) {
+                if (categoryButtons[i] == currentFocused && i > 0) {
+                    categoryButtons[i - 1]->RequestFocus();
+                    break;
+                }
+            }
+        } else {
+            if (currentFocused == backButton) {
+                increaseButton->RequestFocus();
+            } else if (currentFocused == increaseButton) {
+                decreaseButton->RequestFocus();
+            } else if (currentFocused == decreaseButton) {
+                if (itemList) {
+                    itemList->SetFocused(true);
+                    itemList->RequestFocus();
+                }
+            }
+        }
+    });
+
+    directionalHandler.SetOnMoveLeft([this]() {
+        if (currentCategory == -1) {
+            return;
+        }
+
+        auto currentFocused = bagScreenFocusManager ? bagScreenFocusManager->GetFocusedElement() : nullptr;
+        if (!currentFocused) {
+            return;
+        }
+
+        if (currentFocused == increaseButton) {
+            decreaseButton->RequestFocus();
+        } else if (currentFocused == backButton) {
+            increaseButton->RequestFocus();
+        }
+    });
+
+    directionalHandler.SetOnMoveRight([this]() {
+        if (currentCategory == -1) {
+            return;
+        }
+
+        auto currentFocused = bagScreenFocusManager ? bagScreenFocusManager->GetFocusedElement() : nullptr;
+        if (!currentFocused) {
+            return;
+        }
+
+        if (currentFocused == decreaseButton) {
+            increaseButton->RequestFocus();
+        } else if (currentFocused == increaseButton) {
+            backButton->RequestFocus();
         }
     });
 
@@ -97,6 +173,18 @@ void BagScreen::OnInput(u64 down, u64 up, u64 held) {
         return;
     }
 
+    if (down & HidNpadButton_B) {
+        if (currentCategory == -1) {
+            LOG_DEBUG("B button pressed, returning to main menu");
+            if (this->onBack) {
+                this->onBack();
+            }
+        } else {
+            ShowCategory(-1);
+        }
+        return;
+    }
+
     buttonHandler.HandleInput(down, up, held);
 
     if ((currentCategory != -1) && itemList && itemList->IsFocused()) {
@@ -105,43 +193,7 @@ void BagScreen::OnInput(u64 down, u64 up, u64 held) {
         return;
     }
 
-    if (down & HidNpadButton_Down) {
-        auto currentFocused = bagScreenFocusManager->GetFocusedElement();
-        if (currentFocused) {
-            if (currentCategory == -1) {
-                for (size_t i = 0; i < categoryButtons.size(); i++) {
-                    if (categoryButtons[i] == currentFocused && i + 1 < categoryButtons.size()) {
-                        categoryButtons[i + 1]->RequestFocus();
-                        break;
-                    }
-                }
-            } else {
-                if (currentFocused == decreaseButton) {
-                    increaseButton->RequestFocus();
-                } else if (currentFocused == increaseButton) {
-                    backButton->RequestFocus();
-                }
-            }
-        }
-    } else if (down & HidNpadButton_Up) {
-        auto currentFocused = bagScreenFocusManager->GetFocusedElement();
-        if (currentFocused) {
-            if (currentCategory == -1) {
-                for (size_t i = 0; i < categoryButtons.size(); i++) {
-                    if (categoryButtons[i] == currentFocused && i > 0) {
-                        categoryButtons[i - 1]->RequestFocus();
-                        break;
-                    }
-                }
-            } else {
-                if (currentFocused == backButton) {
-                    increaseButton->RequestFocus();
-                } else if (currentFocused == increaseButton) {
-                    decreaseButton->RequestFocus();
-                }
-            }
-        }
-    }
+    directionalHandler.HandleInput(down, held);
 
     auto focused = bagScreenFocusManager->GetFocusedElement();
     if (focused && (down & HidNpadButton_A)) {
@@ -344,6 +396,18 @@ void BagScreen::CreateItemControls() {
     );
     itemList->SetVisible(false);
     itemList->SetOnSelectionChanged([this]() { this->UpdateItemDisplay(); });
+    itemList->SetOnCancel([this]() { ShowCategory(-1); });
+    itemList->SetOnFocusExit([this](pksm::ui::FocusExitDirection dir) {
+        if (dir != pksm::ui::FocusExitDirection::Down) {
+            return;
+        }
+        if (itemList) {
+            itemList->SetFocused(false);
+        }
+        if (decreaseButton) {
+            decreaseButton->RequestFocus();
+        }
+    });
     bagScreenFocusManager->RegisterFocusable(itemList);
     this->Add(itemList);
 

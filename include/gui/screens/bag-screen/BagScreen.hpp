@@ -10,85 +10,88 @@
 #include "gui/shared/components/FocusableButton.hpp"
 #include "gui/shared/components/FocusableMenu.hpp"
 #include "input/ButtonInputHandler.hpp"
+#include "input/directional/DirectionalInputHandler.hpp"
 #include "input/visual-feedback/FocusManager.hpp"
 
-namespace pksm::layout {
+namespace pksm::layout
+{
 
-class BagScreen : public BaseLayout {
-public:
-    BagScreen(
-        ISaveDataAccessor::Ref saveDataAccessor,
-        std::function<void()> onBack,
-        std::function<void(pu::ui::Overlay::Ref)> onShowOverlay,
-        std::function<void()> onHideOverlay
-    );
-    PU_SMART_CTOR(BagScreen)
-    ~BagScreen();
+    class BagScreen : public BaseLayout
+    {
+    public:
+        BagScreen(
+            ISaveDataAccessor::Ref saveDataAccessor,
+            std::function<void()> onBack,
+            std::function<void(pu::ui::Overlay::Ref)> onShowOverlay,
+            std::function<void()> onHideOverlay);
+        PU_SMART_CTOR(BagScreen)
+        ~BagScreen();
 
-    void RefreshCategories();
+        void RefreshCategories();
 
-private:
-    pu::ui::elm::Element::Ref background;
-    pu::ui::Color bgColor = pu::ui::Color(180, 140, 0, 255);  // yellow/gold theme for bag screen
-    ISaveDataAccessor::Ref saveDataAccessor;
-    std::function<void()> onBack;
+    private:
+        pu::ui::elm::Element::Ref background;
+        pu::ui::Color bgColor = pu::ui::Color(180, 140, 0, 255); // yellow/gold theme for bag screen
+        ISaveDataAccessor::Ref saveDataAccessor;
+        std::function<void()> onBack;
 
-    // UI Elements
-    pu::ui::elm::TextBlock::Ref headerText;
-    pu::ui::elm::TextBlock::Ref categoryHeaderText;
-    pu::ui::elm::TextBlock::Ref itemNameText;
-    pu::ui::elm::TextBlock::Ref itemQuantityText;
-    
-    // Bag category buttons
-    std::vector<pksm::ui::FocusableButton::Ref> categoryButtons;
-    std::vector<std::string> categoryLabels;
-    std::vector<pksm::saves::BagPouch> categoryPouches;
+        // UI Elements
+        pu::ui::elm::TextBlock::Ref headerText;
+        pu::ui::elm::TextBlock::Ref categoryHeaderText;
+        pu::ui::elm::TextBlock::Ref itemNameText;
+        pu::ui::elm::TextBlock::Ref itemQuantityText;
 
-    // Item list
-    pksm::ui::FocusableMenu::Ref itemList;
-    std::vector<size_t> currentItemMap;
-    
-    // Item control buttons
-    pksm::ui::FocusableButton::Ref decreaseButton;
-    pksm::ui::FocusableButton::Ref increaseButton;
-    pksm::ui::FocusableButton::Ref backButton;
+        // Bag category buttons
+        std::vector<pksm::ui::FocusableButton::Ref> categoryButtons;
+        std::vector<std::string> categoryLabels;
+        std::vector<pksm::saves::BagPouch> categoryPouches;
 
-    // Focus management
-    pksm::input::FocusManager::Ref bagScreenFocusManager;
+        // Item list
+        pksm::ui::FocusableMenu::Ref itemList;
+        std::vector<size_t> currentItemMap;
 
-    // Input handlers
-    pksm::input::ButtonInputHandler buttonHandler;
+        // Item control buttons
+        pksm::ui::FocusableButton::Ref decreaseButton;
+        pksm::ui::FocusableButton::Ref increaseButton;
+        pksm::ui::FocusableButton::Ref backButton;
 
-    // Current state
-    int currentCategory = -1;
-    int currentItemIndex = 0;
-    int currentItemQuantity = 99; // default quantity
+        // Focus management
+        pksm::input::FocusManager::Ref bagScreenFocusManager;
 
-    // Layout constants
-    static constexpr pu::i32 HEADER_TOP_MARGIN = 60;
-    static constexpr pu::i32 CATEGORY_TOP_MARGIN = 140;
-    static constexpr pu::i32 SIDE_MARGIN = 70;
-    static constexpr pu::i32 BUTTON_HEIGHT = 80;
-    static constexpr pu::i32 BUTTON_SPACING = 20;
-    static constexpr pu::i32 BUTTON_WIDTH = 1140;
-    static constexpr pu::i32 ITEM_CONTROL_TOP_MARGIN = 400;
-    static constexpr size_t MAX_CATEGORY_BUTTONS = 9;
+        // Input handlers
+        pksm::input::ButtonInputHandler buttonHandler;
+        pksm::input::DirectionalInputHandler directionalHandler;
 
-    // Methods
-    void OnInput(u64 down, u64 up, u64 held);
-    void CreateCategoryButtons();
-    void CreateItemControls();
-    void ShowCategory(int categoryIndex);
-    void UpdateItemDisplay();
+        // Current state placeholders
+        int currentCategory = -1;
+        int currentItemIndex = 0;
+        int currentItemQuantity = 0; // default quantity
 
-    void RefreshItemListForCurrentCategory();
+        // Layout constants
+        static constexpr pu::i32 HEADER_TOP_MARGIN = 60;
+        static constexpr pu::i32 CATEGORY_TOP_MARGIN = 140;
+        static constexpr pu::i32 SIDE_MARGIN = 70;
+        static constexpr pu::i32 BUTTON_HEIGHT = 80;
+        static constexpr pu::i32 BUTTON_SPACING = 20;
+        static constexpr pu::i32 BUTTON_WIDTH = 1140;
+        static constexpr pu::i32 ITEM_CONTROL_TOP_MARGIN = 400;
+        static constexpr size_t MAX_CATEGORY_BUTTONS = 9;
 
-    void BuildCategoriesForCurrentSave();
+        // Methods
+        void OnInput(u64 down, u64 up, u64 held);
+        void CreateCategoryButtons();
+        void CreateItemControls();
+        void ShowCategory(int categoryIndex);
+        void UpdateItemDisplay();
 
-    // Override BaseLayout methods
-    std::vector<pksm::ui::HelpItem> GetHelpOverlayItems() const override;
-    void OnHelpOverlayShown() override;
-    void OnHelpOverlayHidden() override;
-};
+        void RefreshItemListForCurrentCategory();
 
-}  // namespace pksm::layout
+        void BuildCategoriesForCurrentSave();
+
+        // Override BaseLayout methods
+        std::vector<pksm::ui::HelpItem> GetHelpOverlayItems() const override;
+        void OnHelpOverlayShown() override;
+        void OnHelpOverlayHidden() override;
+    };
+
+} // namespace pksm::layout
