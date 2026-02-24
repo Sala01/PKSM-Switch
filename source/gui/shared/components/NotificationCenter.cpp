@@ -162,7 +162,7 @@ void NotificationCenter::OnRender(pu::ui::render::Renderer::Ref& drawer, const p
         const auto wrapped = WrapTextToWidth(toast.body, bodyFont, measureColor, bodyMaxWidth);
         const pu::i32 wrappedH = wrapped.empty() ? 0 : (static_cast<pu::i32>(wrapped.size()) * lineHeight) + ((static_cast<pu::i32>(wrapped.size()) - 1) * BODY_LINE_SPACING);
         const pu::i32 baseContentH = TOAST_PADDING_Y + TITLE_HEIGHT + TITLE_DIVIDER_OFFSET + DIVIDER_HEIGHT + BODY_BOX_PADDING + BODY_BOX_PADDING + TOAST_PADDING_Y;
-        const pu::i32 desiredToastH = std::min<pu::i32>(MAX_TOAST_HEIGHT, std::max<pu::i32>(MIN_TOAST_HEIGHT, baseContentH + wrappedH));
+        const pu::i32 desiredToastH = std::min<pu::i32>(MAX_TOAST_HEIGHT, std::max<pu::i32>(MIN_TOAST_HEIGHT, baseContentH + wrappedH + BODY_EXTRA_BOTTOM));
         infos.push_back(ToastRenderInfo{wrapped, desiredToastH});
         stackHeight += desiredToastH;
     }
