@@ -34,6 +34,7 @@
 #include "pkx/PK6.hpp"
 #include "pkx/PK7.hpp"
 #include "pkx/PK8.hpp"
+#include "pkx/PA9.hpp"
 #include "pkx/PKX.hpp"
 #include "sav/Sav1.hpp"
 #include "sav/Sav2.hpp"
@@ -46,6 +47,8 @@
 #include "sav/SavLGPE.hpp"
 #include "sav/SavORAS.hpp"
 #include "sav/SavPLA.hpp"
+#include "sav/SavSV.hpp"
+#include "sav/SavZA.hpp"
 #include "sav/SavPT.hpp"
 #include "sav/SavRS.hpp"
 #include "sav/SavSUMO.hpp"
@@ -112,7 +115,32 @@ namespace pksm
                 ret = std::make_unique<SavPLA>(dt, length);
                 break;
             default:
-                ret = std::unique_ptr<Sav>(nullptr);
+                // Try content-based detection for SV/Z-A (SCBlock format saves).
+                // Sav8 constructor applies XOR to the shared buffer, so we must
+                // copy the data before each attempt to avoid double-XOR corruption.
+                {
+                    auto dtCopy = std::shared_ptr<u8[]>(new u8[length]);
+                    std::copy(dt.get(), dt.get() + length, dtCopy.get());
+                    try
+                    {
+                        auto sv = std::make_unique<SavSV>(dtCopy, length);
+                        ret = std::move(sv);
+                    }
+                    catch (...) {}
+                    // If not SV, try Z-A with the original (unmodified) buffer
+                    if (!ret)
+                    {
+                        try
+                        {
+                            auto za = std::make_unique<SavZA>(dt, length);
+                            ret = std::move(za);
+                        }
+                        catch (...)
+                        {
+                            ret = std::unique_ptr<Sav>(nullptr);
+                        }
+                    }
+                }
                 break;
         }
 
@@ -292,6 +320,8 @@ namespace pksm
                 return pk.convertToLGPE(*this);
             case Generation::EIGHT:
                 return pk.convertToG8(*this);
+            case Generation::NINE:
+                return pk.convertToG9(*this);
             case Generation::UNUSED:
                 return nullptr;
         }
@@ -336,6 +366,7 @@ namespace pksm
             case Generation::SEVEN:
             case Generation::LGPE:
             case Generation::EIGHT:
+            case Generation::NINE:
                 return u32(SID() << 16 | TID()) % 1000000;
             case Generation::UNUSED:
                 return 0;
@@ -355,6 +386,7 @@ namespace pksm
             case Generation::SEVEN:
             case Generation::LGPE:
             case Generation::EIGHT:
+            case Generation::NINE:
                 return u32(SID() << 16 | TID()) / 1000000;
             case Generation::UNUSED:
             case Generation::ONE:

@@ -314,6 +314,7 @@ namespace i18n
                     case pksm::Generation::SEVEN:
                     case pksm::Generation::LGPE:
                     case pksm::Generation::EIGHT:
+                    case pksm::Generation::NINE:
                         ret = FA(Default, Original, Hoenn, Sinnoh, Unova, Kalos, Alola, Partner,
                             Default, World);
                         break;
@@ -365,6 +366,7 @@ namespace i18n
                         ret = FA(Default, Mega);
                         break;
                     case pksm::Generation::EIGHT:
+                    case pksm::Generation::NINE:
                         ret = FA(Default, Galarian);
                         break;
                     default:

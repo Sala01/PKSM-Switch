@@ -34,7 +34,9 @@
 #include "pkx/PK6.hpp"
 #include "pkx/PK7.hpp"
 #include "pkx/PA8.hpp"
+#include "pkx/PA9.hpp"
 #include "pkx/PK8.hpp"
+#include "pkx/PK9.hpp"
 #include "pkx/PKFilter.hpp"
 #include "utils/endian.hpp"
 #include "utils/random.hpp"
@@ -406,6 +408,9 @@ namespace pksm
             case Generation::EIGHT:
                 genderTypeFinder = PersonalSWSH::gender;
                 break;
+            case Generation::NINE:
+                genderTypeFinder = PersonalSV::gender;
+                break;
             case Generation::UNUSED:
             case Generation::ONE:
             case Generation::TWO:
@@ -472,6 +477,7 @@ namespace pksm
             case GameVersion::GE:
             case GameVersion::SW:
             case GameVersion::SH:
+            case GameVersion::ZA:
                 return u32(SID() << 16 | TID()) % 1000000;
         }
     }
@@ -490,6 +496,7 @@ namespace pksm
             case GameVersion::GE:
             case GameVersion::SW:
             case GameVersion::SH:
+            case GameVersion::ZA:
                 return u32(SID() << 16 | TID()) / 1000000;
         }
     }
@@ -508,6 +515,7 @@ namespace pksm
             case Generation::SEVEN:
             case Generation::LGPE:
             case Generation::EIGHT:
+            case Generation::NINE:
                 return u32(SID() << 16 | TID()) % 1000000;
             case Generation::UNUSED:
                 return 0;
@@ -527,6 +535,7 @@ namespace pksm
             case Generation::SEVEN:
             case Generation::LGPE:
             case Generation::EIGHT:
+            case Generation::NINE:
                 return u32(SID() << 16 | TID()) / 1000000;
             case Generation::UNUSED:
             case Generation::ONE:
@@ -562,6 +571,8 @@ namespace pksm
                     return getPKM<PA8>(data, length, directAccess);
                 }
                 return getPKM<Generation::EIGHT>(data, length, directAccess);
+            case Generation::NINE:
+                return getPKM<Generation::NINE>(data, length, directAccess);
             case Generation::UNUSED:
                 return nullptr;
         }
@@ -720,6 +731,11 @@ namespace pksm
                  : nullptr;
     }
 
+    std::unique_ptr<PKX> PKX::convertToG9(Sav&) const
+    {
+        return generation() == Generation::NINE ? clone() : nullptr;
+    }
+
     std::unique_ptr<PKX> PKX::partyClone() const
     {
         if (isParty())
@@ -768,6 +784,18 @@ namespace pksm
                     {
                         partylen = PK8::PARTY_LENGTH;
                     }
+                    break;
+                case Generation::NINE:
+                    // Gen9 has multiple formats (SV PK9, ZA PA9) with identical sizes.
+                    // Must dispatch by type since getPKM(generation) defaults to PK9.
+                    if (extension() == ".pa9")
+                    {
+                        auto ret = PKX::getPKM<PA9>(nullptr, PA9::PARTY_LENGTH);
+                        std::copy(data, data + getLength(), ret->rawData().data());
+                        ret->updatePartyData();
+                        return ret;
+                    }
+                    partylen = PK9::PARTY_LENGTH;
                     break;
                 default:
                     partylen = 0;
