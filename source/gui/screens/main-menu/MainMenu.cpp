@@ -17,7 +17,10 @@ MainMenu::MainMenu(
     onBack(onBack),
     saveDataAccessor(saveDataAccessor),
     navigationCallbacks(navigationCallbacks),
-    buttonHandler() {
+    buttonHandler(),
+    isExitConfirmVisible(false),
+    exitConfirmSelectedIndex(0),
+    exitConfirmOverlay(nullptr) {
     LOG_DEBUG("Initializing MainMenu...");
 
     this->SetBackgroundColor(bgColor);
@@ -97,6 +100,17 @@ MainMenu::MainMenu(
         HidNpadButton_B,
         nullptr,  // No visual feedback needed
         [this]() {
+            if (this->saveDataAccessor && this->saveDataAccessor->hasUnsavedChanges()) {
+                if (!this->isExitConfirmVisible) {
+                    this->exitConfirmSelectedIndex = 0;
+                    this->exitConfirmOverlay = pksm::ui::ConfirmExitOverlay::New(0, 0, this->GetWidth(), this->GetHeight());
+                    this->exitConfirmOverlay->SetSelectedIndex(this->exitConfirmSelectedIndex);
+                    this->onShowOverlay(this->exitConfirmOverlay);
+                    this->isExitConfirmVisible = true;
+                }
+                return;
+            }
+
             LOG_DEBUG("B button pressed, returning to game selection");
             if (this->onBack) {
                 this->onBack();
@@ -183,6 +197,75 @@ void MainMenu::UpdateTrainerInfo() {
 MainMenu::~MainMenu() = default;
 
 void MainMenu::OnInput(u64 down, u64 up, u64 held) {
+    if (isExitConfirmVisible) {
+        if (down & HidNpadButton_B) {
+            this->onHideOverlay();
+            this->isExitConfirmVisible = false;
+            this->exitConfirmOverlay = nullptr;
+            return;
+        }
+
+        if (down & HidNpadButton_AnyUp) {
+            if (exitConfirmSelectedIndex > 0) {
+                exitConfirmSelectedIndex--;
+                if (exitConfirmOverlay) {
+                    exitConfirmOverlay->SetSelectedIndex(exitConfirmSelectedIndex);
+                }
+            }
+            return;
+        }
+
+        if (down & HidNpadButton_AnyDown) {
+            if (exitConfirmSelectedIndex < 2) {
+                exitConfirmSelectedIndex++;
+                if (exitConfirmOverlay) {
+                    exitConfirmOverlay->SetSelectedIndex(exitConfirmSelectedIndex);
+                }
+            }
+            return;
+        }
+
+        if (down & HidNpadButton_A) {
+            if (exitConfirmSelectedIndex == 0) {
+                if (!this->saveDataAccessor) {
+                    pksm::utils::NotificationManager::Push("Save Failed", "No save accessor available.");
+                    return;
+                }
+
+                if (!this->saveDataAccessor->getCurrentSaveData()) {
+                    pksm::utils::NotificationManager::Push("Save Failed", "No save loaded.");
+                    return;
+                }
+
+                if (this->saveDataAccessor->hasUnsavedChanges() && !this->saveDataAccessor->saveChanges()) {
+                    const auto err = this->saveDataAccessor->getLastError();
+                    if (!err.empty()) {
+                        pksm::utils::NotificationManager::Push("Save Failed", err);
+                    } else {
+                        pksm::utils::NotificationManager::Push("Save Failed", "Failed to save changes.");
+                    }
+                    return;
+                }
+            }
+
+            if (exitConfirmSelectedIndex != 2) {
+                this->onHideOverlay();
+                this->isExitConfirmVisible = false;
+                this->exitConfirmOverlay = nullptr;
+                if (this->onBack) {
+                    this->onBack();
+                }
+            } else {
+                this->onHideOverlay();
+                this->isExitConfirmVisible = false;
+                this->exitConfirmOverlay = nullptr;
+            }
+            return;
+        }
+
+        return;
+    }
+
     // First handle help-related input
     if (HandleHelpInput(down)) {
         return;  // Input was handled by help system
