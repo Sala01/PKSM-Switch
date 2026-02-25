@@ -30,6 +30,258 @@
 #include "utils/flagUtil.hpp"
 #include "utils/utils.hpp"
 
+#define RIBBON_ABSENT 0xFFFFFFFF
+
+namespace
+{
+    std::pair<size_t, size_t> OFFSET_OF(pksm::Ribbon rib)
+    {
+        switch (rib)
+        {
+            // Byte 0x34
+            case pksm::Ribbon::ChampionKalos:
+                return {0x34, 0};
+            case pksm::Ribbon::ChampionG3Hoenn:
+                return {0x34, 1};
+            case pksm::Ribbon::ChampionSinnoh:
+                return {0x34, 2};
+            case pksm::Ribbon::BestFriends:
+                return {0x34, 3};
+            case pksm::Ribbon::Training:
+                return {0x34, 4};
+            case pksm::Ribbon::BattlerSkillful:
+                return {0x34, 5};
+            case pksm::Ribbon::BattlerExpert:
+                return {0x34, 6};
+            case pksm::Ribbon::Effort:
+                return {0x34, 7};
+            // Byte 0x35
+            case pksm::Ribbon::Alert:
+                return {0x35, 0};
+            case pksm::Ribbon::Shock:
+                return {0x35, 1};
+            case pksm::Ribbon::Downcast:
+                return {0x35, 2};
+            case pksm::Ribbon::Careless:
+                return {0x35, 3};
+            case pksm::Ribbon::Relax:
+                return {0x35, 4};
+            case pksm::Ribbon::Snooze:
+                return {0x35, 5};
+            case pksm::Ribbon::Smile:
+                return {0x35, 6};
+            case pksm::Ribbon::Gorgeous:
+                return {0x35, 7};
+            // Byte 0x36
+            case pksm::Ribbon::Royal:
+                return {0x36, 0};
+            case pksm::Ribbon::GorgeousRoyal:
+                return {0x36, 1};
+            case pksm::Ribbon::Artist:
+                return {0x36, 2};
+            case pksm::Ribbon::Footprint:
+                return {0x36, 3};
+            case pksm::Ribbon::Record:
+                return {0x36, 4};
+            case pksm::Ribbon::Legend:
+                return {0x36, 5};
+            case pksm::Ribbon::Country:
+                return {0x36, 6};
+            case pksm::Ribbon::National:
+                return {0x36, 7};
+            // Byte 0x37
+            case pksm::Ribbon::Earth:
+                return {0x37, 0};
+            case pksm::Ribbon::World:
+                return {0x37, 1};
+            case pksm::Ribbon::Classic:
+                return {0x37, 2};
+            case pksm::Ribbon::Premier:
+                return {0x37, 3};
+            case pksm::Ribbon::Event:
+                return {0x37, 4};
+            case pksm::Ribbon::Birthday:
+                return {0x37, 5};
+            case pksm::Ribbon::Special:
+                return {0x37, 6};
+            case pksm::Ribbon::Souvenir:
+                return {0x37, 7};
+            // Byte 0x38
+            case pksm::Ribbon::Wishing:
+                return {0x38, 0};
+            case pksm::Ribbon::ChampionBattle:
+                return {0x38, 1};
+            case pksm::Ribbon::ChampionRegional:
+                return {0x38, 2};
+            case pksm::Ribbon::ChampionNational:
+                return {0x38, 3};
+            case pksm::Ribbon::ChampionWorld:
+                return {0x38, 4};
+            case pksm::Ribbon::MemoryContest:
+                return {0x38, 5};
+            case pksm::Ribbon::MemoryBattle:
+                return {0x38, 6};
+            case pksm::Ribbon::ChampionG6Hoenn:
+                return {0x38, 7};
+            // Byte 0x39
+            case pksm::Ribbon::ContestStar:
+                return {0x39, 0};
+            case pksm::Ribbon::MasterCoolness:
+                return {0x39, 1};
+            case pksm::Ribbon::MasterBeauty:
+                return {0x39, 2};
+            case pksm::Ribbon::MasterCuteness:
+                return {0x39, 3};
+            case pksm::Ribbon::MasterCleverness:
+                return {0x39, 4};
+            case pksm::Ribbon::MasterToughness:
+                return {0x39, 5};
+            case pksm::Ribbon::ChampionAlola:
+                return {0x39, 6};
+            case pksm::Ribbon::BattleRoyale:
+                return {0x39, 7};
+            // Byte 0x3A
+            case pksm::Ribbon::BattleTreeGreat:
+                return {0x3A, 0};
+            case pksm::Ribbon::BattleTreeMaster:
+                return {0x3A, 1};
+            case pksm::Ribbon::ChampionGalar:
+                return {0x3A, 2};
+            case pksm::Ribbon::TowerMaster:
+                return {0x3A, 3};
+            case pksm::Ribbon::MasterRank:
+                return {0x3A, 4};
+            case pksm::Ribbon::MarkLunchtime:
+                return {0x3A, 5};
+            case pksm::Ribbon::MarkSleepyTime:
+                return {0x3A, 6};
+            case pksm::Ribbon::MarkDusk:
+                return {0x3A, 7};
+            // Byte 0x3B
+            case pksm::Ribbon::MarkDawn:
+                return {0x3B, 0};
+            case pksm::Ribbon::MarkCloudy:
+                return {0x3B, 1};
+            case pksm::Ribbon::MarkRainy:
+                return {0x3B, 2};
+            case pksm::Ribbon::MarkStormy:
+                return {0x3B, 3};
+            case pksm::Ribbon::MarkSnowy:
+                return {0x3B, 4};
+            case pksm::Ribbon::MarkBlizzard:
+                return {0x3B, 5};
+            case pksm::Ribbon::MarkDry:
+                return {0x3B, 6};
+            case pksm::Ribbon::MarkSandstorm:
+                return {0x3B, 7};
+            // 0x3C-0x3F: memory ribbon counts + padding (not bit flags)
+            // Byte 0x40
+            case pksm::Ribbon::MarkMisty:
+                return {0x40, 0};
+            case pksm::Ribbon::MarkDestiny:
+                return {0x40, 1};
+            case pksm::Ribbon::MarkFishing:
+                return {0x40, 2};
+            case pksm::Ribbon::MarkCurry:
+                return {0x40, 3};
+            case pksm::Ribbon::MarkUncommon:
+                return {0x40, 4};
+            case pksm::Ribbon::MarkRare:
+                return {0x40, 5};
+            case pksm::Ribbon::MarkRowdy:
+                return {0x40, 6};
+            case pksm::Ribbon::MarkAbsentMinded:
+                return {0x40, 7};
+            // Byte 0x41
+            case pksm::Ribbon::MarkJittery:
+                return {0x41, 0};
+            case pksm::Ribbon::MarkExcited:
+                return {0x41, 1};
+            case pksm::Ribbon::MarkCharismatic:
+                return {0x41, 2};
+            case pksm::Ribbon::MarkCalmness:
+                return {0x41, 3};
+            case pksm::Ribbon::MarkIntense:
+                return {0x41, 4};
+            case pksm::Ribbon::MarkZonedOut:
+                return {0x41, 5};
+            case pksm::Ribbon::MarkJoyful:
+                return {0x41, 6};
+            case pksm::Ribbon::MarkAngry:
+                return {0x41, 7};
+            // Byte 0x42
+            case pksm::Ribbon::MarkSmiley:
+                return {0x42, 0};
+            case pksm::Ribbon::MarkTeary:
+                return {0x42, 1};
+            case pksm::Ribbon::MarkUpbeat:
+                return {0x42, 2};
+            case pksm::Ribbon::MarkPeeved:
+                return {0x42, 3};
+            case pksm::Ribbon::MarkIntellectual:
+                return {0x42, 4};
+            case pksm::Ribbon::MarkFerocious:
+                return {0x42, 5};
+            case pksm::Ribbon::MarkCrafty:
+                return {0x42, 6};
+            case pksm::Ribbon::MarkScowling:
+                return {0x42, 7};
+            // Byte 0x43
+            case pksm::Ribbon::MarkKindly:
+                return {0x43, 0};
+            case pksm::Ribbon::MarkFlustered:
+                return {0x43, 1};
+            case pksm::Ribbon::MarkPumpedUp:
+                return {0x43, 2};
+            case pksm::Ribbon::MarkZeroEnergy:
+                return {0x43, 3};
+            case pksm::Ribbon::MarkPrideful:
+                return {0x43, 4};
+            case pksm::Ribbon::MarkUnsure:
+                return {0x43, 5};
+            case pksm::Ribbon::MarkHumble:
+                return {0x43, 6};
+            case pksm::Ribbon::MarkThorny:
+                return {0x43, 7};
+            // Byte 0x44
+            case pksm::Ribbon::MarkVigor:
+                return {0x44, 0};
+            case pksm::Ribbon::MarkSlump:
+                return {0x44, 1};
+            case pksm::Ribbon::Hisui:
+                return {0x44, 2};
+            case pksm::Ribbon::TwinklingStar:
+                return {0x44, 3};
+            case pksm::Ribbon::ChampionPaldea:
+                return {0x44, 4};
+            case pksm::Ribbon::MarkJumbo:
+                return {0x44, 5};
+            case pksm::Ribbon::MarkMini:
+                return {0x44, 6};
+            case pksm::Ribbon::MarkItemfinder:
+                return {0x44, 7};
+            // Byte 0x45
+            case pksm::Ribbon::MarkPartner:
+                return {0x45, 0};
+            case pksm::Ribbon::MarkGourmand:
+                return {0x45, 1};
+            case pksm::Ribbon::OnceInALifetime:
+                return {0x45, 2};
+            case pksm::Ribbon::MarkAlpha:
+                return {0x45, 3};
+            case pksm::Ribbon::MarkMightiest:
+                return {0x45, 4};
+            case pksm::Ribbon::MarkTitan:
+                return {0x45, 5};
+            case pksm::Ribbon::Partner:
+                return {0x45, 6};
+
+            default:
+                return {RIBBON_ABSENT, 0};
+        }
+    }
+}
+
 namespace pksm
 {
     void PA9::encrypt(void)
@@ -323,18 +575,28 @@ namespace pksm
         data[0x32] = (data[0x32] & 0xF) | (v << 4);
     }
 
-    bool PA9::hasRibbon(Ribbon) const
+    bool PA9::hasRibbon(Ribbon ribbon) const
     {
+        return OFFSET_OF(ribbon).first != RIBBON_ABSENT;
+    }
+
+    bool PA9::ribbon(Ribbon ribbon) const
+    {
+        auto offset = OFFSET_OF(ribbon);
+        if (offset.first != RIBBON_ABSENT)
+        {
+            return FlagUtil::getFlag(data, offset.first, offset.second);
+        }
         return false;
     }
 
-    bool PA9::ribbon(Ribbon) const
+    void PA9::ribbon(Ribbon ribbon, bool v)
     {
-        return false;
-    }
-
-    void PA9::ribbon(Ribbon, bool)
-    {
+        auto offset = OFFSET_OF(ribbon);
+        if (offset.first != RIBBON_ABSENT)
+        {
+            FlagUtil::setFlag(data, offset.first, offset.second, v);
+        }
     }
 
     std::string PA9::nickname(void) const

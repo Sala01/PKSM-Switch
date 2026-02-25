@@ -168,6 +168,8 @@ namespace pksm
             pk9->contest(i, contest(i));
         }
 
+        // PA8 ribbon support is stubbed; no ribbons are awarded in PLA
+
         // PK9-specific: set TeraType from PersonalSV types
         if (!targetIsZA)
         {
