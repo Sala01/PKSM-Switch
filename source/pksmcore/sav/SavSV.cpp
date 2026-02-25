@@ -47,6 +47,8 @@ namespace
 
     // PokeDexEntry9Paldea: 0x18 bytes per species
     constexpr int DEX_ENTRY_SIZE = 0x18;
+    // PokeDexEntry9Kitakami: 0x20 bytes per species (DLC 2.0.1+)
+    constexpr int DEX_ENTRY_SIZE_KIT = 0x20;
 
     // Gen 9 species converter: national dex ID -> internal ID
     // Species 0-916 are identity. From 917, apply delta from table.
@@ -669,28 +671,75 @@ namespace pksm
         }
     }
 
-    // Pokedex: SV uses PokeDexEntry9Paldea (0x18 bytes per species), indexed by internal species ID
+    // Pokedex: SV uses PokeDexEntry9Paldea (0x18) for base game, PokeDexEntry9Kitakami (0x20) for DLC 2.0.1+
     void SavSV::dex(const PKX& pk)
     {
         if (pk.egg())
         {
             return;
         }
+
+        u16 species  = u16(pk.species());
+        u16 internal = getInternal9(species);
+        u8 form      = pk.alternativeForm();
+
+        // Try Kitakami block first (DLC 2.0.1+ — Paldea block is dummied out)
+        auto blockKit = getBlock(KZukanT1);
+        if (blockKit)
+        {
+            u8* entry = blockKit->decryptedData() + internal * DEX_ENTRY_SIZE_KIT;
+
+            // Forms obtained (0x00)
+            u32 obtFlags = LittleEndian::convertTo<u32>(entry + 0x00);
+            obtFlags |= (1u << form);
+            LittleEndian::convertFrom<u32>(entry + 0x00, obtFlags);
+
+            // Forms seen (0x04)
+            u32 seenFlags = LittleEndian::convertTo<u32>(entry + 0x04);
+            seenFlags |= (1u << form);
+            LittleEndian::convertFrom<u32>(entry + 0x04, seenFlags);
+
+            // Forms heard (0x08)
+            u32 heardFlags = LittleEndian::convertTo<u32>(entry + 0x08);
+            heardFlags |= (1u << form);
+            LittleEndian::convertFrom<u32>(entry + 0x08, heardFlags);
+
+            // Language flags (0x10)
+            u16 langFlags = LittleEndian::convertTo<u16>(entry + 0x10);
+            langFlags |= u16(1u << getDexLangFlag(u8(pk.language())));
+            langFlags |= u16(1u << getDexLangFlag(u8(language())));
+            LittleEndian::convertFrom<u16>(entry + 0x10, langFlags);
+
+            // Gender seen (0x12)
+            entry[0x12] |= u8(1u << u8(pk.gender()));
+
+            // Shiny model (0x13): bit 0=regular always set, bit 1=shiny
+            entry[0x13] |= 0x01;
+            if (pk.shiny())
+            {
+                entry[0x13] |= 0x02;
+            }
+
+            // Display data — Paldea region slot (0x14)
+            entry[0x14] = form;
+            entry[0x15] = u8(pk.gender());
+            entry[0x16] = pk.shiny() ? u8(1) : u8(0);
+            return;
+        }
+
+        // Fall back to Paldea block (base game only)
         auto block = getBlock(KZukan);
         if (!block)
         {
             return;
         }
 
-        u16 species  = u16(pk.species());
-        u16 internal = getInternal9(species);
-        u8* entry    = block->decryptedData() + internal * DEX_ENTRY_SIZE;
+        u8* entry = block->decryptedData() + internal * DEX_ENTRY_SIZE;
 
         // State: set to 3 (caught)
         LittleEndian::convertFrom<u32>(entry + 0x00, 3u);
 
         // Form seen flag
-        u8 form       = pk.alternativeForm();
         u32 formFlags = LittleEndian::convertTo<u32>(entry + 0x04);
         formFlags |= (1u << form);
         LittleEndian::convertFrom<u32>(entry + 0x04, formFlags);
@@ -723,6 +772,25 @@ namespace pksm
 
     int SavSV::dexSeen(void) const
     {
+        // Try Kitakami block first (DLC 2.0.1+)
+        auto blockKit = getBlock(KZukanT1);
+        if (blockKit)
+        {
+            u8* data = blockKit->decryptedData();
+            int count = 0;
+            for (const auto& spec : availableSpecies())
+            {
+                u16 internal  = getInternal9(u16(spec));
+                u32 seenFlags = LittleEndian::convertTo<u32>(data + internal * DEX_ENTRY_SIZE_KIT + 0x04);
+                if (seenFlags != 0)
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        // Fall back to Paldea block (base game only)
         auto block = getBlock(KZukan);
         if (!block)
         {
@@ -744,6 +812,25 @@ namespace pksm
 
     int SavSV::dexCaught(void) const
     {
+        // Try Kitakami block first (DLC 2.0.1+)
+        auto blockKit = getBlock(KZukanT1);
+        if (blockKit)
+        {
+            u8* data = blockKit->decryptedData();
+            int count = 0;
+            for (const auto& spec : availableSpecies())
+            {
+                u16 internal    = getInternal9(u16(spec));
+                u32 caughtFlags = LittleEndian::convertTo<u32>(data + internal * DEX_ENTRY_SIZE_KIT);
+                if (caughtFlags != 0)
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        // Fall back to Paldea block (base game only)
         auto block = getBlock(KZukan);
         if (!block)
         {
