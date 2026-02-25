@@ -63,7 +63,7 @@ VER_MINOR	:= 1
 VER_MICRO	:= 1
 
 APP_TITLE   := PKSM
-APP_AUTHOR  := FlagBrew, nicooo_dev
+APP_AUTHOR  := FlagBrew, nicooo_dev, Insektaure
 APP_TITLEID := 0100A1B0C0D0E000
 
 APP_VERSION := $(VER_MAJOR).$(VER_MINOR).$(VER_MICRO)
