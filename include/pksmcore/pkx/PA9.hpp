@@ -100,6 +100,8 @@ namespace pksm
         void fatefulEncounter(bool v) override;
         Gender gender(void) const override;
         void gender(Gender g) override;
+        bool isAlpha(void) const;
+        void isAlpha(bool v);
         u16 alternativeForm(void) const override;
         void alternativeForm(u16 v) override;
         u16 ev(Stat ev) const override;

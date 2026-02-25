@@ -29,7 +29,9 @@
 #include "sav/Item.hpp"
 #include "utils/endian.hpp"
 #include "utils/i18n.hpp"
+#include "utils/random.hpp"
 #include "utils/utils.hpp"
+#include "wcx/WC9.hpp"
 #include <algorithm>
 #include <cstring>
 #include <ranges>
@@ -759,5 +761,248 @@ namespace pksm
             }
         }
         return count;
+    }
+
+    void SavSV::mysteryGift(const WCX& wc, int&)
+    {
+        if (wc.generation() != Generation::NINE || wc.extension() != ".wc9")
+        {
+            return;
+        }
+
+        const WC9& wc9 = static_cast<const WC9&>(wc);
+        if (wc9.pokemon())
+        {
+            int injectPosition = 0;
+            for (injectPosition = 0; injectPosition < maxSlot(); injectPosition++)
+            {
+                if (pkm(injectPosition / 30, injectPosition % 30)->species() == Species::None)
+                {
+                    break;
+                }
+            }
+
+            // No place to put generated PK9
+            if (injectPosition == maxSlot())
+            {
+                return;
+            }
+
+            auto pk9 = PKX::getPKM<Generation::NINE>(nullptr, PK9::BOX_LENGTH);
+
+            pk9->encryptionConstant(wc9.encryptionConstant()
+                                        ? wc9.encryptionConstant()
+                                        : pksm::randomNumber(0, 0xFFFFFFFF));
+            pk9->TID(wc9.TID());
+            pk9->SID(wc9.SID());
+            pk9->species(wc9.species());
+            pk9->alternativeForm(wc9.alternativeForm());
+            pk9->level(wc9.level() ? wc9.level() : pksm::randomNumber(1, 100));
+            pk9->ball(wc9.ball() ? wc9.ball() : Ball::Poke);
+            pk9->metLevel(wc9.metLevel() ? wc9.metLevel() : pk9->level());
+            pk9->heldItem(wc9.heldItem());
+
+            for (size_t move = 0; move < 4; move++)
+            {
+                pk9->move(move, wc9.move(move));
+                pk9->relearnMove(move, wc9.relearnMove(move));
+            }
+
+            pk9->version(wc9.version() != GameVersion::INVALID ? wc9.version() : version());
+
+            std::string wcOT = wc9.otName(language());
+            if (wcOT.empty())
+            {
+                pk9->otName(otName());
+                pk9->otGender(gender());
+            }
+            else
+            {
+                pk9->otName(wcOT);
+                pk9->otGender(wc9.otGender() < Gender::Genderless ? wc9.otGender() : gender());
+                pk9->currentHandler(PKXHandler::NonOT);
+            }
+
+            pk9->fatefulEncounter(true);
+
+            for (Stat stat :
+                {Stat::HP, Stat::ATK, Stat::DEF, Stat::SPD, Stat::SPATK, Stat::SPDEF})
+            {
+                pk9->ev(stat, wc9.ev(stat));
+            }
+
+            pk9->metLocation(wc9.metLocation());
+            pk9->eggLocation(wc9.eggLocation());
+
+            if (wc9.otGender() >= Gender::Genderless)
+            {
+                pk9->TID(TID());
+                pk9->SID(SID());
+            }
+
+            if (pk9->species() == Species::Meowstic)
+            {
+                pk9->alternativeForm(u8(pk9->gender()));
+            }
+
+            pk9->metDate(Date::today());
+
+            Language nickLang = wc9.nicknameLanguage(language());
+            if (nickLang != Language(0))
+            {
+                pk9->language(nickLang);
+            }
+            else
+            {
+                pk9->language(language());
+            }
+
+            pk9->nicknamed(wc9.nicknamed(pk9->language()));
+            pk9->nickname(pk9->nicknamed() ? wc9.nickname(pk9->language())
+                                           : pk9->species().localize(pk9->language()));
+
+            // Ribbon transfer: WC9 stores ribbon index bytes (0xFF = none)
+            // Mapping: PKHeX RibbonIndex 0-45 == PKSM Ribbon 0-45;
+            //          PKHeX RibbonIndex 46+ == PKSM Ribbon (idx + 48)
+            for (int i = 0; i < 0x20; i++)
+            {
+                u8 ribIdx = wc9.ribbonAtIndex(i);
+                if (ribIdx == 0xFF)
+                {
+                    continue;
+                }
+                Ribbon rib = ribIdx <= 45 ? Ribbon{u32(ribIdx)} : Ribbon{u32(ribIdx) + 48};
+                pk9->ribbon(rib, true);
+            }
+
+            if (wc9.egg())
+            {
+                pk9->eggDate(Date::today());
+                pk9->nickname(i18n::species(pk9->language(), Species::None));
+                pk9->nicknamed(true);
+            }
+
+            pk9->currentFriendship(pk9->baseFriendship());
+
+            // TeraType
+            auto pk9Ptr = static_cast<PK9*>(pk9.get());
+            pk9Ptr->teraTypeOriginal(wc9.teraType());
+
+            pk9->nature(wc9.nature() == Nature::INVALID ? Nature{u8(pksm::randomNumber(0, 24))}
+                                                        : wc9.nature());
+            pk9->gender(
+                PKX::genderFromRatio(pksm::randomNumber(0, 0xFFFFFFFF), pk9->genderType()));
+
+            // Ability
+            switch (wc9.abilityType())
+            {
+                case 0:
+                case 1:
+                case 2:
+                    pk9->setAbility(wc9.abilityType());
+                    break;
+                case 3:
+                case 4:
+                    pk9->setAbility(pksm::randomNumber(0, wc9.abilityType() - 2));
+                    break;
+            }
+
+            // PID
+            switch (wc9.PIDType())
+            {
+                case 0: // Fixed value
+                    pk9->PID(wc9.PID());
+                    break;
+                case 1: // Random
+                    pk9->PID(pksm::randomNumber(0, 0xFFFFFFFF));
+                    break;
+                case 2: // Force shiny
+                case 3:
+                    pk9->PID(pksm::randomNumber(0, 0xFFFFFFFF));
+                    pk9->PID(((pk9->TID() ^ pk9->SID() ^ (pk9->PID() & 0xFFFF) ^ 1) << 16) |
+                             (pk9->PID() & 0xFFFF));
+                    break;
+                case 4: // Fixed PID value
+                    pk9->PID(wc9.PID());
+                    break;
+                default: // Never shiny
+                    pk9->PID(pksm::randomNumber(0, 0xFFFFFFFF));
+                    pk9->shiny(false);
+                    break;
+            }
+
+            // IVs
+            int numPerfectIVs = 0;
+            for (Stat stat :
+                {Stat::HP, Stat::ATK, Stat::DEF, Stat::SPD, Stat::SPATK, Stat::SPDEF})
+            {
+                if (wc9.iv(stat) - 0xFC < 3)
+                {
+                    numPerfectIVs = wc9.iv(stat) - 0xFB;
+                    break;
+                }
+            }
+            for (int iv = 0; iv < numPerfectIVs; iv++)
+            {
+                Stat setMeTo31 = Stat(pksm::randomNumber(0, 5));
+                while (pk9->iv(setMeTo31) == 31)
+                {
+                    setMeTo31 = Stat(pksm::randomNumber(0, 5));
+                }
+                pk9->iv(setMeTo31, 31);
+            }
+            for (Stat stat :
+                {Stat::HP, Stat::ATK, Stat::DEF, Stat::SPD, Stat::SPATK, Stat::SPDEF})
+            {
+                if (pk9->iv(stat) != 31)
+                {
+                    pk9->iv(stat, pksm::randomNumber(0, 31));
+                }
+            }
+
+            pk9->refreshChecksum();
+
+            pkm(*pk9, injectPosition / 30, injectPosition % 30, false);
+        }
+        else if (wc9.item())
+        {
+            auto valid  = validItems();
+            auto limits = pouches();
+            for (int itemNum = 0; itemNum < wc9.items(); itemNum++)
+            {
+                bool currentSet = false;
+                for (size_t pouch = 0; pouch < limits.size(); pouch++)
+                {
+                    auto validPouch = std::ranges::find_if(valid,
+                        [&](const auto& i) {
+                            return i.first == limits[pouch].first;
+                        })->second;
+                    if (!currentSet && std::binary_search(validPouch.begin(), validPouch.end(),
+                                           wc9.object(itemNum)))
+                    {
+                        for (int slot = 0; slot < limits[pouch].second; slot++)
+                        {
+                            auto occupying = item(limits[pouch].first, slot);
+                            if (occupying->id() == 0)
+                            {
+                                occupying->id(wc9.object(itemNum));
+                                occupying->count(wc9.objectQuantity(itemNum));
+                                item(*occupying, limits[pouch].first, slot);
+                                currentSet = true;
+                                break;
+                            }
+                            else if (occupying->id() == wc9.object(itemNum) &&
+                                     limits[pouch].first != Pouch::TM)
+                            {
+                                occupying->count(occupying->count() + 1);
+                                item(*occupying, limits[pouch].first, slot);
+                                currentSet = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -29,7 +29,9 @@
 #include "sav/Item.hpp"
 #include "utils/endian.hpp"
 #include "utils/i18n.hpp"
+#include "utils/random.hpp"
 #include "utils/utils.hpp"
+#include "wcx/WA9.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -710,5 +712,244 @@ namespace pksm
             }
         }
         return count;
+    }
+
+    void SavZA::mysteryGift(const WCX& wc, int&)
+    {
+        if (wc.generation() != Generation::NINE || wc.extension() != ".wa9")
+        {
+            return;
+        }
+
+        const WA9& wa9 = static_cast<const WA9&>(wc);
+        if (wa9.pokemon())
+        {
+            int injectPosition = 0;
+            for (injectPosition = 0; injectPosition < maxSlot(); injectPosition++)
+            {
+                if (pkm(injectPosition / 30, injectPosition % 30)->species() == Species::None)
+                {
+                    break;
+                }
+            }
+
+            if (injectPosition == maxSlot())
+            {
+                return;
+            }
+
+            auto pa9 = PKX::getPKM<PA9>(nullptr, PA9::BOX_LENGTH);
+
+            pa9->encryptionConstant(wa9.encryptionConstant()
+                                        ? wa9.encryptionConstant()
+                                        : pksm::randomNumber(0, 0xFFFFFFFF));
+            pa9->TID(wa9.TID());
+            pa9->SID(wa9.SID());
+            pa9->species(wa9.species());
+            pa9->alternativeForm(wa9.alternativeForm());
+            pa9->level(wa9.level() ? wa9.level() : pksm::randomNumber(1, 100));
+            pa9->ball(wa9.ball() ? wa9.ball() : Ball::Poke);
+            pa9->metLevel(wa9.metLevel() ? wa9.metLevel() : pa9->level());
+            pa9->heldItem(wa9.heldItem());
+
+            for (size_t move = 0; move < 4; move++)
+            {
+                pa9->move(move, wa9.move(move));
+                pa9->relearnMove(move, wa9.relearnMove(move));
+            }
+
+            pa9->version(wa9.version() != GameVersion::INVALID ? wa9.version() : version());
+
+            std::string wcOT = wa9.otName(language());
+            if (wcOT.empty())
+            {
+                pa9->otName(otName());
+                pa9->otGender(gender());
+            }
+            else
+            {
+                pa9->otName(wcOT);
+                pa9->otGender(wa9.otGender() < Gender::Genderless ? wa9.otGender() : gender());
+                pa9->currentHandler(PKXHandler::NonOT);
+            }
+
+            pa9->fatefulEncounter(true);
+
+            for (Stat stat :
+                {Stat::HP, Stat::ATK, Stat::DEF, Stat::SPD, Stat::SPATK, Stat::SPDEF})
+            {
+                pa9->ev(stat, wa9.ev(stat));
+            }
+
+            pa9->metLocation(wa9.metLocation());
+            pa9->eggLocation(wa9.eggLocation());
+
+            if (wa9.otGender() >= Gender::Genderless)
+            {
+                pa9->TID(TID());
+                pa9->SID(SID());
+            }
+
+            if (pa9->species() == Species::Meowstic)
+            {
+                pa9->alternativeForm(u8(pa9->gender()));
+            }
+
+            pa9->metDate(Date::today());
+
+            Language nickLang = wa9.nicknameLanguage(language());
+            if (nickLang != Language(0))
+            {
+                pa9->language(nickLang);
+            }
+            else
+            {
+                pa9->language(language());
+            }
+
+            pa9->nicknamed(wa9.nicknamed(pa9->language()));
+            pa9->nickname(pa9->nicknamed() ? wa9.nickname(pa9->language())
+                                           : pa9->species().localize(pa9->language()));
+
+            // Ribbon transfer: WA9 stores ribbon index bytes (0xFF = none)
+            for (int i = 0; i < 0x20; i++)
+            {
+                u8 ribIdx = wa9.ribbonAtIndex(i);
+                if (ribIdx == 0xFF)
+                {
+                    continue;
+                }
+                Ribbon rib = ribIdx <= 45 ? Ribbon{u32(ribIdx)} : Ribbon{u32(ribIdx) + 48};
+                pa9->ribbon(rib, true);
+            }
+
+            if (wa9.egg())
+            {
+                pa9->eggDate(Date::today());
+                pa9->nickname(i18n::species(pa9->language(), Species::None));
+                pa9->nicknamed(true);
+            }
+
+            pa9->currentFriendship(pa9->baseFriendship());
+
+            // Alpha
+            static_cast<PA9*>(pa9.get())->isAlpha(wa9.isAlpha());
+
+            pa9->nature(wa9.nature() == Nature::INVALID ? Nature{u8(pksm::randomNumber(0, 24))}
+                                                        : wa9.nature());
+            pa9->gender(
+                PKX::genderFromRatio(pksm::randomNumber(0, 0xFFFFFFFF), pa9->genderType()));
+
+            // Ability
+            switch (wa9.abilityType())
+            {
+                case 0:
+                case 1:
+                case 2:
+                    pa9->setAbility(wa9.abilityType());
+                    break;
+                case 3:
+                case 4:
+                    pa9->setAbility(pksm::randomNumber(0, wa9.abilityType() - 2));
+                    break;
+            }
+
+            // PID
+            switch (wa9.PIDType())
+            {
+                case 0: // Fixed value
+                    pa9->PID(wa9.PID());
+                    break;
+                case 1: // Random
+                    pa9->PID(pksm::randomNumber(0, 0xFFFFFFFF));
+                    break;
+                case 2: // Force shiny
+                case 3:
+                    pa9->PID(pksm::randomNumber(0, 0xFFFFFFFF));
+                    pa9->PID(((pa9->TID() ^ pa9->SID() ^ (pa9->PID() & 0xFFFF) ^ 1) << 16) |
+                             (pa9->PID() & 0xFFFF));
+                    break;
+                case 4: // Fixed PID value
+                    pa9->PID(wa9.PID());
+                    break;
+                default: // Never shiny
+                    pa9->PID(pksm::randomNumber(0, 0xFFFFFFFF));
+                    pa9->shiny(false);
+                    break;
+            }
+
+            // IVs
+            int numPerfectIVs = 0;
+            for (Stat stat :
+                {Stat::HP, Stat::ATK, Stat::DEF, Stat::SPD, Stat::SPATK, Stat::SPDEF})
+            {
+                if (wa9.iv(stat) - 0xFC < 3)
+                {
+                    numPerfectIVs = wa9.iv(stat) - 0xFB;
+                    break;
+                }
+            }
+            for (int iv = 0; iv < numPerfectIVs; iv++)
+            {
+                Stat setMeTo31 = Stat(pksm::randomNumber(0, 5));
+                while (pa9->iv(setMeTo31) == 31)
+                {
+                    setMeTo31 = Stat(pksm::randomNumber(0, 5));
+                }
+                pa9->iv(setMeTo31, 31);
+            }
+            for (Stat stat :
+                {Stat::HP, Stat::ATK, Stat::DEF, Stat::SPD, Stat::SPATK, Stat::SPDEF})
+            {
+                if (pa9->iv(stat) != 31)
+                {
+                    pa9->iv(stat, pksm::randomNumber(0, 31));
+                }
+            }
+
+            pa9->refreshChecksum();
+
+            pkm(*pa9, injectPosition / 30, injectPosition % 30, false);
+        }
+        else if (wa9.item())
+        {
+            auto valid  = validItems();
+            auto limits = pouches();
+            for (int itemNum = 0; itemNum < wa9.items(); itemNum++)
+            {
+                bool currentSet = false;
+                for (size_t pouch = 0; pouch < limits.size(); pouch++)
+                {
+                    auto validPouch = std::ranges::find_if(valid,
+                        [&](const auto& i) {
+                            return i.first == limits[pouch].first;
+                        })->second;
+                    if (!currentSet && std::binary_search(validPouch.begin(), validPouch.end(),
+                                           wa9.object(itemNum)))
+                    {
+                        for (int slot = 0; slot < limits[pouch].second; slot++)
+                        {
+                            auto occupying = item(limits[pouch].first, slot);
+                            if (occupying->id() == 0)
+                            {
+                                occupying->id(wa9.object(itemNum));
+                                occupying->count(wa9.objectQuantity(itemNum));
+                                item(*occupying, limits[pouch].first, slot);
+                                currentSet = true;
+                                break;
+                            }
+                            else if (occupying->id() == wa9.object(itemNum) &&
+                                     limits[pouch].first != Pouch::TM)
+                            {
+                                occupying->count(occupying->count() + 1);
+                                item(*occupying, limits[pouch].first, slot);
+                                currentSet = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -158,14 +158,14 @@ namespace pksm
         void cryptBoxData(bool crypted) override;
 
         [[nodiscard]] int maxBoxes(void) const override { return 32; }
-        [[nodiscard]] size_t maxWondercards(void) const override { return 0; }
+        [[nodiscard]] size_t maxWondercards(void) const override { return 1; }
         [[nodiscard]] int currentGiftAmount(void) const override { return 0; }
 
         void dex(const PKX &pk) override;
         [[nodiscard]] int dexSeen(void) const override;
         [[nodiscard]] int dexCaught(void) const override;
 
-        void mysteryGift(const WCX &, int &) override {}
+        void mysteryGift(const WCX &wc, int &pos) override;
         [[nodiscard]] std::unique_ptr<WCX> mysteryGift(int) const override { return nullptr; }
     };
 }

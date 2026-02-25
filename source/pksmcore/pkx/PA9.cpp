@@ -515,6 +515,16 @@ namespace pksm
         data[0x22] = (data[0x22] & ~12) | ((u8(v) & 3) << 2);
     }
 
+    bool PA9::isAlpha(void) const
+    {
+        return data[0x23] != 0;
+    }
+
+    void PA9::isAlpha(bool v)
+    {
+        data[0x23] = v ? 1 : 0;
+    }
+
     u16 PA9::alternativeForm(void) const
     {
         return data[0x24];
