@@ -12,12 +12,14 @@ StorageScreen::StorageScreen(
     std::function<void(pu::ui::Overlay::Ref)> onShowOverlay,
     std::function<void()> onHideOverlay,
     ISaveDataAccessor::Ref saveDataAccessor,
-    IBoxDataProvider::Ref boxDataProvider
+    IBoxDataProvider::Ref boxDataProvider,
+    IBoxDataProvider::Ref bankBoxDataProvider
 )
   : BaseLayout(onShowOverlay, onHideOverlay),
     onBack(onBack),
     saveDataAccessor(saveDataAccessor),
     boxDataProvider(boxDataProvider),
+    bankBoxDataProvider(bankBoxDataProvider),
     isSummaryOverlayVisible(false) {
     LOG_DEBUG("Initializing StorageScreen...");
 
@@ -52,20 +54,27 @@ StorageScreen::StorageScreen(
             return;
         }
 
-        if (!this->saveDataAccessor || !this->boxDataProvider) {
-            return;
-        }
-
-        auto saveData = this->saveDataAccessor->getCurrentSaveData();
-        if (!saveData) {
+        if (!this->saveDataAccessor) {
             return;
         }
 
         pksm::ui::PokemonBox::Ref targetBox;
+        IBoxDataProvider::Ref provider;
+        pksm::saves::SaveData::Ref saveData;
         if (activeBox == ActiveBox::Save) {
             targetBox = pokemonSaveBox;
+            provider = this->boxDataProvider;
+            saveData = this->saveDataAccessor->getCurrentSaveData();
+            if (!provider || !saveData) {
+                return;
+            }
         } else {
             targetBox = pokemonBankBox;
+            provider = this->bankBoxDataProvider;
+            saveData = this->saveDataAccessor->getCurrentSaveData();
+            if (!provider) {
+                return;
+            }
         }
 
         if (!targetBox) {
@@ -83,7 +92,7 @@ StorageScreen::StorageScreen(
             return;
         }
 
-        auto pk = this->boxDataProvider->GetPokemon(saveData, boxIndex, slotIndex);
+        auto pk = provider->GetPokemon(saveData, boxIndex, slotIndex);
         if (!pk) {
             return;
         }
@@ -180,16 +189,7 @@ void StorageScreen::InitializePokemonBoxes() {
     pokemonSaveBox->SetName("PokemonSaveBox Element");
     pokemonSaveBox->EstablishOwningRelationship();
 
-    // Initialize bank box with placeholder data
-    pokemonBankBox->SetBoxCount(32);
-    for (int i = 0; i < 32; i++) {
-        pksm::ui::BoxData boxData;
-        boxData.name = "Bank Box " + std::to_string(i + 1);
-        pokemonBankBox->SetBoxData(i, boxData);
-    }
-    pokemonBankBox->SetCurrentBox(0);
-
-    // Load box data for the current save into the save box
+    // Load box data for both Bank and Save
     LoadBoxData();
 
     pokemonBankBox->SetOnSelectionChanged([this](int boxIndex, int slotIndex) {
@@ -208,30 +208,39 @@ void StorageScreen::LoadBoxData() {
     LOG_DEBUG("Loading box data from provider...");
 
     auto currentSave = saveDataAccessor->getCurrentSaveData();
-    if (!currentSave) {
+
+    // Bank boxes
+    if (pokemonBankBox && bankBoxDataProvider) {
+        const size_t bankCount = bankBoxDataProvider->GetBoxCount(currentSave);
+        pokemonBankBox->SetBoxCount(bankCount);
+        for (size_t i = 0; i < bankCount; ++i) {
+            auto boxData = bankBoxDataProvider->GetBoxData(currentSave, static_cast<int>(i));
+            pokemonBankBox->SetBoxData(static_cast<int>(i), boxData);
+        }
+        pokemonBankBox->SetCurrentBox(0);
+    }
+
+    // Save boxes
+    if (!currentSave || !pokemonSaveBox || !boxDataProvider) {
         LOG_DEBUG("No save data available, using fallback box data");
-        // Set a default box count if no save data available
-        pokemonSaveBox->SetBoxCount(1);
-        // Start at box 0
-        pokemonSaveBox->SetCurrentBox(0);
+        if (pokemonSaveBox) {
+            pokemonSaveBox->SetBoxCount(1);
+            pokemonSaveBox->SetCurrentBox(0);
+        }
         LOG_DEBUG("Fallback box data loaded");
         return;
     }
 
-    // Get box count from the provider
-    size_t boxCount = boxDataProvider->GetBoxCount(currentSave);
+    const size_t boxCount = boxDataProvider->GetBoxCount(currentSave);
     LOG_DEBUG("Setting box count to " + std::to_string(boxCount));
     pokemonSaveBox->SetBoxCount(boxCount);
 
-    // Load all boxes at once to ensure the box data provider knows about them
     for (size_t i = 0; i < boxCount; ++i) {
-        auto boxData = boxDataProvider->GetBoxData(currentSave, i);
-        pokemonSaveBox->SetBoxData(i, boxData);
+        auto boxData = boxDataProvider->GetBoxData(currentSave, static_cast<int>(i));
+        pokemonSaveBox->SetBoxData(static_cast<int>(i), boxData);
     }
 
-    // start at box 0
     pokemonSaveBox->SetCurrentBox(0);
-
     LOG_DEBUG("Box data loaded successfully");
 }
 

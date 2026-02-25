@@ -1,8 +1,9 @@
 #include "PKSMApplication.hpp"
 
-#include <sstream>
+#include <format>
 #include <switch.h>
 
+#include "data/providers/BankBoxDataProvider.hpp"
 #include "data/providers/BoxDataProvider.hpp"
 #include "data/providers/SaveDataAccessor.hpp"
 #include "data/providers/SaveDataProvider.hpp"
@@ -92,14 +93,16 @@ PKSMApplication::PKSMApplication(
     ITitleDataProvider::Ref titleProvider,
     ISaveDataProvider::Ref saveProvider,
     ISaveDataAccessor::Ref saveDataAccessor,
-    IBoxDataProvider::Ref boxDataProvider
+    IBoxDataProvider::Ref boxDataProvider,
+    IBoxDataProvider::Ref bankBoxDataProvider
 )
   : pu::ui::Application(renderer),
     accountManager(std::move(accountManager)),
     titleProvider(std::move(titleProvider)),
     saveProvider(std::move(saveProvider)),
     saveDataAccessor(std::move(saveDataAccessor)),
-    boxDataProvider(std::move(boxDataProvider)) {
+    boxDataProvider(std::move(boxDataProvider)),
+    bankBoxDataProvider(std::move(bankBoxDataProvider)) {
     // Add render callback to process account updates
     AddRenderCallback([this]() { this->accountManager->ProcessPendingUpdates(); });
 
@@ -163,12 +166,14 @@ PKSMApplication::Ref PKSMApplication::Initialize() {
         auto saveProviderConcrete = std::make_shared<SaveDataProvider>(accountManager->GetCurrentAccount());
         auto saveDataAccessorConcrete = std::make_shared<SaveDataAccessor>(accountManager->GetCurrentAccount());
         auto boxDataProviderConcrete = std::make_shared<BoxDataProvider>();
+        auto bankBoxDataProviderConcrete = std::make_shared<BankBoxDataProvider>();
 
         // Cast to interface types expected by PKSMApplication
         ITitleDataProvider::Ref titleProvider = std::static_pointer_cast<ITitleDataProvider>(titleProviderConcrete);
         ISaveDataProvider::Ref saveProvider = std::static_pointer_cast<ISaveDataProvider>(saveProviderConcrete);
         ISaveDataAccessor::Ref saveDataAccessor = std::static_pointer_cast<ISaveDataAccessor>(saveDataAccessorConcrete);
         IBoxDataProvider::Ref boxDataProvider = std::static_pointer_cast<IBoxDataProvider>(boxDataProviderConcrete);
+        IBoxDataProvider::Ref bankBoxDataProvider = std::static_pointer_cast<IBoxDataProvider>(bankBoxDataProviderConcrete);
 
         LOG_MEMORY();  // Memory after data provider initialization
 
@@ -182,7 +187,8 @@ PKSMApplication::Ref PKSMApplication::Initialize() {
             titleProvider,
             saveProvider,
             saveDataAccessor,
-            boxDataProvider
+            boxDataProvider,
+            bankBoxDataProvider
         );
 
         LOG_DEBUG("Preparing application...");
@@ -315,7 +321,8 @@ void PKSMApplication::OnLoad() {
             [this](pu::ui::Overlay::Ref overlay) { this->StartOverlay(overlay); },
             [this]() { this->EndOverlay(); },
             saveDataAccessor,  // Pass the save data accessor
-            boxDataProvider  // Pass the box data provider
+            boxDataProvider,  // Pass the box data provider
+            bankBoxDataProvider  // Pass the bank box data provider
         );
 
         // Create bag screen

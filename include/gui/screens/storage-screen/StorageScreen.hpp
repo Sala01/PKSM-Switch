@@ -18,67 +18,74 @@
 #include "input/visual-feedback/FocusManager.hpp"
 #include "input/visual-feedback/SelectionManager.hpp"
 
-namespace pksm::layout {
+namespace pksm::layout
+{
 
-class StorageScreen : public BaseLayout {
-public:
-    StorageScreen(
-        std::function<void()> onBack,
-        std::function<void(pu::ui::Overlay::Ref)> onShowOverlay,
-        std::function<void()> onHideOverlay,
-        ISaveDataAccessor::Ref saveDataAccessor,
-        IBoxDataProvider::Ref boxDataProvider
-    );
-    PU_SMART_CTOR(StorageScreen)
-    ~StorageScreen();
+    class StorageScreen : public BaseLayout
+    {
+    public:
+        StorageScreen(
+            std::function<void()> onBack,
+            std::function<void(pu::ui::Overlay::Ref)> onShowOverlay,
+            std::function<void()> onHideOverlay,
+            ISaveDataAccessor::Ref saveDataAccessor,
+            IBoxDataProvider::Ref boxDataProvider,
+            IBoxDataProvider::Ref bankBoxDataProvider);
+        PU_SMART_CTOR(StorageScreen)
+        ~StorageScreen();
 
-    // Public method to load/refresh box data
-    void LoadBoxData();
+        // Public method to load/refresh box data
+        void LoadBoxData();
 
-private:
-    enum class ActiveBox { Bank, Save };
+    private:
+        enum class ActiveBox
+        {
+            Bank,
+            Save
+        };
 
-    pu::ui::elm::TextBlock::Ref headerText;
-    pu::ui::elm::Element::Ref background;
-    pu::ui::Color bgColor = pu::ui::Color(5, 171, 49, 255);
-    std::function<void()> onBack;
-    pksm::ui::PokemonBox::Ref pokemonBankBox;
-    pksm::ui::PokemonBox::Ref pokemonSaveBox;
-    ActiveBox activeBox = ActiveBox::Save;
-    ISaveDataAccessor::Ref saveDataAccessor;
-    IBoxDataProvider::Ref boxDataProvider;
+        pu::ui::elm::TextBlock::Ref headerText;
+        pu::ui::elm::Element::Ref background;
+        pu::ui::Color bgColor = pu::ui::Color(5, 171, 49, 255);
+        std::function<void()> onBack;
+        pksm::ui::PokemonBox::Ref pokemonBankBox;
+        pksm::ui::PokemonBox::Ref pokemonSaveBox;
+        ActiveBox activeBox = ActiveBox::Save;
+        ISaveDataAccessor::Ref saveDataAccessor;
+        IBoxDataProvider::Ref boxDataProvider;
+        IBoxDataProvider::Ref bankBoxDataProvider;
 
-    bool isSummaryOverlayVisible = false;
+        bool isSummaryOverlayVisible = false;
 
-    // Layout constants
-    static constexpr pu::i32 HEADER_TOP_MARGIN = 35;
-    static constexpr pu::i32 SIDE_MARGIN = 70;
-    static constexpr pu::i32 BOX_GRID_SIDE_MARGIN = 80;  // Margin from left edge
-    static constexpr pu::i32 SAVE_BOX_SIDE_MARGIN = 1000;  // Margin from left edge (right side, moved further right)
-    static constexpr pu::i32 BOX_GRID_TOP_MARGIN = 120;  // Margin from top
-    static constexpr pu::i32 BOX_ITEM_SIZE = 124;  // Size of each box item
+        // Layout constants
+        static constexpr pu::i32 HEADER_TOP_MARGIN = 35;
+        static constexpr pu::i32 SIDE_MARGIN = 70;
+        static constexpr pu::i32 BOX_GRID_SIDE_MARGIN = 80;   // Margin from left edge
+        static constexpr pu::i32 SAVE_BOX_SIDE_MARGIN = 1000; // Margin from left edge (right side, moved further right)
+        static constexpr pu::i32 BOX_GRID_TOP_MARGIN = 120;   // Margin from top
+        static constexpr pu::i32 BOX_ITEM_SIZE = 124;         // Size of each box item
 
-    // Focus and selection management
-    pksm::input::FocusManager::Ref storageScreenFocusManager;
-    pksm::input::SelectionManager::Ref storageScreenSelectionManager;
-    pksm::input::FocusManager::Ref pokemonBankBoxFocusManager;
-    pksm::input::SelectionManager::Ref pokemonBankBoxSelectionManager;
-    pksm::input::FocusManager::Ref pokemonSaveBoxFocusManager;
-    pksm::input::SelectionManager::Ref pokemonSaveBoxSelectionManager;
+        // Focus and selection management
+        pksm::input::FocusManager::Ref storageScreenFocusManager;
+        pksm::input::SelectionManager::Ref storageScreenSelectionManager;
+        pksm::input::FocusManager::Ref pokemonBankBoxFocusManager;
+        pksm::input::SelectionManager::Ref pokemonBankBoxSelectionManager;
+        pksm::input::FocusManager::Ref pokemonSaveBoxFocusManager;
+        pksm::input::SelectionManager::Ref pokemonSaveBoxSelectionManager;
 
-    // Input handlers
-    pksm::input::DirectionalInputHandler pokemonBoxDirectionalHandler;
-    pksm::input::ButtonInputHandler buttonHandler;
+        // Input handlers
+        pksm::input::DirectionalInputHandler pokemonBoxDirectionalHandler;
+        pksm::input::ButtonInputHandler buttonHandler;
 
-    void OnInput(u64 down, u64 up, u64 held);
-    void InitializePokemonBoxes();
-    void InitializeFocusManagement();
-    void SetActiveBox(ActiveBox box);
+        void OnInput(u64 down, u64 up, u64 held);
+        void InitializePokemonBoxes();
+        void InitializeFocusManagement();
+        void SetActiveBox(ActiveBox box);
 
-    // Override BaseLayout methods
-    std::vector<pksm::ui::HelpItem> GetHelpOverlayItems() const override;
-    void OnHelpOverlayShown() override;
-    void OnHelpOverlayHidden() override;
-};
+        // Override BaseLayout methods
+        std::vector<pksm::ui::HelpItem> GetHelpOverlayItems() const override;
+        void OnHelpOverlayShown() override;
+        void OnHelpOverlayHidden() override;
+    };
 
-}  // namespace pksm::layout
+} // namespace pksm::layout
