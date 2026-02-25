@@ -64,6 +64,7 @@ namespace pksm
     std::unique_ptr<Sav> Sav::getSave(const std::shared_ptr<u8[]>& dt, size_t length)
     {
         std::unique_ptr<Sav> ret = nullptr;
+
         switch (length)
         {
             case 0x6CC00:
@@ -114,33 +115,40 @@ namespace pksm
             case SavPLA::SIZE_G8PLA_1:
                 ret = std::make_unique<SavPLA>(dt, length);
                 break;
-            default:
-                // Try content-based detection for SV/Z-A (SCBlock format saves).
-                // Sav8 constructor applies XOR to the shared buffer, so we must
-                // copy the data before each attempt to avoid double-XOR corruption.
-                {
-                    auto dtCopy = std::shared_ptr<u8[]>(new u8[length]);
-                    std::copy(dt.get(), dt.get() + length, dtCopy.get());
-                    try
-                    {
-                        auto sv = std::make_unique<SavSV>(dtCopy, length);
-                        ret = std::move(sv);
-                    }
-                    catch (...) {}
-                    // If not SV, try Z-A with the original (unmodified) buffer
-                    if (!ret)
-                    {
-                        try
-                        {
-                            auto za = std::make_unique<SavZA>(dt, length);
-                            ret = std::move(za);
-                        }
-                        catch (...)
-                        {
-                            ret = std::unique_ptr<Sav>(nullptr);
-                        }
-                    }
-                }
+            // SV base game sizes
+            case SavSV::SIZE_G9SV_0:
+            case SavSV::SIZE_G9SV_0a:
+            case SavSV::SIZE_G9SV_1:
+            case SavSV::SIZE_G9SV_1a:
+            case SavSV::SIZE_G9SV_1B:
+            case SavSV::SIZE_G9SV_3:
+            case SavSV::SIZE_G9SV_1A:
+            case SavSV::SIZE_G9SV_1Aa:
+            case SavSV::SIZE_G9SV_1Ab:
+            case SavSV::SIZE_G9SV_2:
+            // SV 1.2.0 sizes
+            case SavSV::SIZE_G9SV_3A1:
+            case SavSV::SIZE_G9SV_3B1:
+            case SavSV::SIZE_G9SV_3P1:
+            case SavSV::SIZE_G9SV_3G1:
+            case SavSV::SIZE_G9SV_3A0:
+            case SavSV::SIZE_G9SV_3B0:
+            case SavSV::SIZE_G9SV_3P0:
+            case SavSV::SIZE_G9SV_3G0:
+            // SV DLC sizes (GCC case range extension for variable-size ranges)
+            case SavSV::SIZE_G9SV_DLC1_MIN ... SavSV::SIZE_G9SV_DLC1_END:
+            case SavSV::SIZE_G9SV_DLC2_MIN ... SavSV::SIZE_G9SV_DLC2_END:
+            case SavSV::SIZE_G9SV_DLC1_202_MIN ... SavSV::SIZE_G9SV_DLC1_202_END:
+            case SavSV::SIZE_G9SV_DLC2_202_MIN ... SavSV::SIZE_G9SV_DLC2_202_END:
+            case SavSV::SIZE_G9SV_DLC1_300_MIN ... SavSV::SIZE_G9SV_DLC1_300_END:
+            case SavSV::SIZE_G9SV_DLC2_300_MIN ... SavSV::SIZE_G9SV_DLC2_300_END:
+                ret = std::make_unique<SavSV>(dt, length);
+                break;
+            case SavZA::SIZE_G9ZA_100:
+            case SavZA::SIZE_G9ZA_102:
+            case SavZA::SIZE_G9ZA_200:
+            case SavZA::SIZE_G9ZA_201:
+                ret = std::make_unique<SavZA>(dt, length);
                 break;
         }
 

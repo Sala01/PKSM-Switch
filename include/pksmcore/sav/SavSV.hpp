@@ -47,6 +47,40 @@ namespace pksm
         static constexpr u32 KPlayTime = 0xEDAFF794;
 
     public:
+        // Base game sizes
+        static constexpr size_t SIZE_G9SV_0   = 0x31626F; // 1.0.0 fresh
+        static constexpr size_t SIZE_G9SV_0a  = 0x31627C; // 1.0.0 after multiplayer
+        static constexpr size_t SIZE_G9SV_1   = 0x319DB3; // 1.0.1 fresh
+        static constexpr size_t SIZE_G9SV_1a  = 0x319DC0; // 1.0.1 after multiplayer
+        static constexpr size_t SIZE_G9SV_1B  = 0x319DD0; // 1.0.1 -> 1.1.0
+        static constexpr size_t SIZE_G9SV_3   = 0x319DC3; // 1.1.0 fresh
+        static constexpr size_t SIZE_G9SV_1A  = 0x31A2C0; // 1.0.0 -> 1.0.1
+        static constexpr size_t SIZE_G9SV_1Aa = 0x31A2CD; // 1.0.0 -> 1.0.1 -> 1.0.1 after MP
+        static constexpr size_t SIZE_G9SV_1Ab = 0x31A2DD; // 1.0.0 -> 1.0.1 -> 1.0.1 after MP -> 1.1.0
+        static constexpr size_t SIZE_G9SV_2   = 0x31A2D0; // 1.0.0 -> 1.1.0
+        // 1.2.0 sizes
+        static constexpr size_t SIZE_G9SV_3A1 = 0x31CA6F; // 1.0.1 -> 1.1.0 -> 1.2.0
+        static constexpr size_t SIZE_G9SV_3B1 = SIZE_G9SV_3A1 - 0xD;
+        static constexpr size_t SIZE_G9SV_3P1 = SIZE_G9SV_3B1 + 0x5;
+        static constexpr size_t SIZE_G9SV_3G1 = SIZE_G9SV_3A1 + 0x5;
+        static constexpr size_t SIZE_G9SV_3A0 = 0x31CF7C; // 1.0.0 -> 1.0.1 -> 1.1.0 -> 1.2.0
+        static constexpr size_t SIZE_G9SV_3B0 = SIZE_G9SV_3A0 - 0xD;
+        static constexpr size_t SIZE_G9SV_3P0 = SIZE_G9SV_3B0 + 0x5;
+        static constexpr size_t SIZE_G9SV_3G0 = SIZE_G9SV_3A0 + 0x5;
+        // DLC sizes (ranges due to variable block configurations)
+        static constexpr size_t SIZE_G9SV_DLC1_MIN = 0x4329A0; // Teal Mask min
+        static constexpr size_t SIZE_G9SV_DLC1_END = 0x432A2D; // Teal Mask max + tolerance
+        static constexpr size_t SIZE_G9SV_DLC2_MIN = 0x432EB6; // Indigo Disk min
+        static constexpr size_t SIZE_G9SV_DLC2_END = 0x432F3A; // Indigo Disk max + tolerance
+        static constexpr size_t SIZE_G9SV_DLC1_202_MIN = 0x43362E;
+        static constexpr size_t SIZE_G9SV_DLC1_202_END = 0x4336BB;
+        static constexpr size_t SIZE_G9SV_DLC2_202_MIN = 0x433B44;
+        static constexpr size_t SIZE_G9SV_DLC2_202_END = 0x433BC8;
+        static constexpr size_t SIZE_G9SV_DLC1_300_MIN = 0x43AD4D;
+        static constexpr size_t SIZE_G9SV_DLC1_300_END = 0x43ADDA;
+        static constexpr size_t SIZE_G9SV_DLC2_300_MIN = 0x43B263;
+        static constexpr size_t SIZE_G9SV_DLC2_300_END = 0x43B2E7;
+
         SavSV(const std::shared_ptr<u8[]> &dt, size_t length);
 
         [[nodiscard]] Generation generation(void) const override { return Generation::NINE; }

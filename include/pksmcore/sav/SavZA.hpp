@@ -47,6 +47,11 @@ namespace pksm
         static constexpr u32 KPlayedSeconds = 0xCE3AF8F2;
 
     public:
+        static constexpr size_t SIZE_G9ZA_100 = 0x2F3284; // v1.0.0
+        static constexpr size_t SIZE_G9ZA_102 = 0x2F3289; // v1.0.2
+        static constexpr size_t SIZE_G9ZA_200 = 0x309FA6; // v2.0.0 (Mega Dimension DLC)
+        static constexpr size_t SIZE_G9ZA_201 = 0x309FB3; // v2.0.0 + revision
+
         SavZA(const std::shared_ptr<u8[]> &dt, size_t length);
 
         [[nodiscard]] Generation generation(void) const override { return Generation::NINE; }
