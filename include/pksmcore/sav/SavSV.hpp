@@ -46,6 +46,7 @@ namespace pksm
         static constexpr u32 KMoney = 0x4F35D0DD;
         static constexpr u32 KPlayTime = 0xEDAFF794;
         static constexpr u32 KLeaguePoints = 0xADB4FE17;
+        static constexpr u32 KZukan = 0x0DEAAEBD;
 
         // Gym badge event flags
         static constexpr u32 KBadgeElectric = 0x8205ECAD;
@@ -160,9 +161,9 @@ namespace pksm
         [[nodiscard]] size_t maxWondercards(void) const override { return 0; }
         [[nodiscard]] int currentGiftAmount(void) const override { return 0; }
 
-        void dex(const PKX &) override {}
-        [[nodiscard]] int dexSeen(void) const override { return 0; }
-        [[nodiscard]] int dexCaught(void) const override { return 0; }
+        void dex(const PKX &pk) override;
+        [[nodiscard]] int dexSeen(void) const override;
+        [[nodiscard]] int dexCaught(void) const override;
 
         void mysteryGift(const WCX &, int &) override {}
         [[nodiscard]] std::unique_ptr<WCX> mysteryGift(int) const override { return nullptr; }

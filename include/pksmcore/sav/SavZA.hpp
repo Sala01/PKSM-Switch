@@ -46,6 +46,7 @@ namespace pksm
         static constexpr u32 KMoney = 0x4F35D0DD;
         static constexpr u32 KPlayedSeconds = 0xCE3AF8F2;
         static constexpr u32 KTicketPointsRoyale = 0x9A730DE1;
+        static constexpr u32 KPokedex = 0x2D87BE5C;
 
     public:
         static constexpr size_t SIZE_G9ZA_100 = 0x2F3284; // v1.0.0
@@ -121,9 +122,9 @@ namespace pksm
         [[nodiscard]] size_t maxWondercards(void) const override { return 0; }
         [[nodiscard]] int currentGiftAmount(void) const override { return 0; }
 
-        void dex(const PKX &) override {}
-        [[nodiscard]] int dexSeen(void) const override { return 0; }
-        [[nodiscard]] int dexCaught(void) const override { return 0; }
+        void dex(const PKX &pk) override;
+        [[nodiscard]] int dexSeen(void) const override;
+        [[nodiscard]] int dexCaught(void) const override;
 
         void mysteryGift(const WCX &, int &) override {}
         [[nodiscard]] std::unique_ptr<WCX> mysteryGift(int) const override { return nullptr; }

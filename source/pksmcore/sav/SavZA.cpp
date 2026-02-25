@@ -47,6 +47,45 @@ namespace
     // Item9a size
     constexpr int ITEM_SIZE = 16;
 
+    // PokeDexEntry9a: 0x84 bytes per species
+    constexpr int DEX_ENTRY_SIZE_ZA = 0x84;
+
+    // Gen 9 species converter: national dex ID -> internal ID
+    constexpr int FIRST_UNALIGNED_9 = 917;
+    constexpr int8_t speciesTable9[] = {
+                                           1,  1,  1,
+         1, 33, 33, 33, 21, 21, 44, 44,  7,  7,
+         7, 29, 31, 31, 31, 68, 68, 68,  2,  2,
+        17, 17, 30, 30, 24, 24, 28, 28, 58, 58,
+        12,-13,-13,-31,-31,-29,-29, 43, 43, 43,
+       -31,-31, -3,-30,-30,-23,-23,-14,-24, -3,
+        -3,-47,-47,-12,-27,-27,-44,-46,-26, 31,
+        29,-53,-65, 25, -6, -3, -7, -4, -4, -8,
+        -4,  1, -3, -3, -6, -4,-47,-47,-47,-23,
+       -23, -5, -7, -9, -7,-20,-13, -9, -9,-29,
+       -23,  1, 12, 12,  0,  0,  0, -6,  5, -6,
+        -3, -3, -2, -4, -3, -3,
+    };
+
+    u16 getInternal9(u16 species)
+    {
+        int shift = species - FIRST_UNALIGNED_9;
+        if (shift < 0 || shift >= (int)std::size(speciesTable9))
+        {
+            return species;
+        }
+        return u16(species + speciesTable9[shift]);
+    }
+
+    int getDexLangFlag(int lang)
+    {
+        if (lang > 10 || lang == 6 || lang <= 0)
+        {
+            return 0;
+        }
+        return lang >= 7 ? lang - 2 : lang - 1;
+    }
+
     // Item lists from ItemStorage9ZA.cs
     constexpr int medicineItems[] = {
         17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
@@ -569,5 +608,107 @@ namespace pksm
                 }
             }
         }
+    }
+
+    // Pokedex: Z-A uses PokeDexEntry9a (0x84 bytes per species), indexed by internal species ID
+    void SavZA::dex(const PKX& pk)
+    {
+        if (pk.egg())
+        {
+            return;
+        }
+        auto block = getBlock(KPokedex);
+        if (!block)
+        {
+            return;
+        }
+
+        u16 species  = u16(pk.species());
+        u16 internal = getInternal9(species);
+        u8* entry    = block->decryptedData() + internal * DEX_ENTRY_SIZE_ZA;
+
+        u8 form = pk.alternativeForm();
+
+        // Form captured (u32 at 0x00)
+        u32 caughtFlags = LittleEndian::convertTo<u32>(entry + 0x00);
+        caughtFlags |= (1u << form);
+        LittleEndian::convertFrom<u32>(entry + 0x00, caughtFlags);
+
+        // Form seen (u32 at 0x04)
+        u32 seenFlags = LittleEndian::convertTo<u32>(entry + 0x04);
+        seenFlags |= (1u << form);
+        LittleEndian::convertFrom<u32>(entry + 0x04, seenFlags);
+
+        // Language obtained (u16 at 0x08)
+        u16 langFlags = LittleEndian::convertTo<u16>(entry + 0x08);
+        langFlags |= u16(1u << getDexLangFlag(u8(pk.language())));
+        langFlags |= u16(1u << getDexLangFlag(u8(language())));
+        LittleEndian::convertFrom<u16>(entry + 0x08, langFlags);
+
+        // New flag (0x0A)
+        entry[0x0A] = 1;
+
+        // Gender seen (0x0B)
+        entry[0x0B] |= u8(1u << u8(pk.gender()));
+
+        // Shiny seen per form (u32 at 0x0C)
+        if (pk.shiny())
+        {
+            u32 shinyFlags = LittleEndian::convertTo<u32>(entry + 0x0C);
+            shinyFlags |= (1u << form);
+            LittleEndian::convertFrom<u32>(entry + 0x0C, shinyFlags);
+        }
+
+        // Display form, gender, shiny (0x5A, 0x5B, 0x5C)
+        entry[0x5A] = form;
+        entry[0x5B] = u8(pk.gender());
+        if (pk.shiny())
+        {
+            entry[0x5C] = 1;
+        }
+    }
+
+    int SavZA::dexSeen(void) const
+    {
+        auto block = getBlock(KPokedex);
+        if (!block)
+        {
+            return 0;
+        }
+        u8* data = block->decryptedData();
+        int count = 0;
+        for (const auto& spec : availableSpecies())
+        {
+            u16 internal   = getInternal9(u16(spec));
+            u32 seenFlags  = LittleEndian::convertTo<u32>(
+                data + internal * DEX_ENTRY_SIZE_ZA + 0x04);
+            if (seenFlags != 0)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    int SavZA::dexCaught(void) const
+    {
+        auto block = getBlock(KPokedex);
+        if (!block)
+        {
+            return 0;
+        }
+        u8* data = block->decryptedData();
+        int count = 0;
+        for (const auto& spec : availableSpecies())
+        {
+            u16 internal     = getInternal9(u16(spec));
+            u32 caughtFlags  = LittleEndian::convertTo<u32>(
+                data + internal * DEX_ENTRY_SIZE_ZA);
+            if (caughtFlags != 0)
+            {
+                count++;
+            }
+        }
+        return count;
     }
 }
