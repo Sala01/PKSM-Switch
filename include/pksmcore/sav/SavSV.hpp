@@ -45,6 +45,17 @@ namespace pksm
         static constexpr u32 KBoxWallpapers = 0x2EB1B190;
         static constexpr u32 KMoney = 0x4F35D0DD;
         static constexpr u32 KPlayTime = 0xEDAFF794;
+        static constexpr u32 KLeaguePoints = 0xADB4FE17;
+
+        // Gym badge event flags
+        static constexpr u32 KBadgeElectric = 0x8205ECAD;
+        static constexpr u32 KBadgePsychic  = 0x3B819021;
+        static constexpr u32 KBadgeGhost    = 0xCDA61DED;
+        static constexpr u32 KBadgeIce      = 0x46B6CB30;
+        static constexpr u32 KBadgeGrass    = 0xB4C3AFE6;
+        static constexpr u32 KBadgeWater    = 0xA803FAAD;
+        static constexpr u32 KBadgeBug      = 0x89306FE6;
+        static constexpr u32 KBadgeNormal   = 0xF90EFD79;
 
     public:
         // Base game sizes
@@ -99,9 +110,9 @@ namespace pksm
         void language(Language v) override;
         [[nodiscard]] u32 money(void) const override;
         void money(u32 v) override;
-        [[nodiscard]] u32 BP(void) const override { return 0; }
-        void BP(u32) override {}
-        [[nodiscard]] u8 badges(void) const override { return 0; }
+        [[nodiscard]] u32 BP(void) const override;
+        void BP(u32 v) override;
+        [[nodiscard]] u8 badges(void) const override;
         [[nodiscard]] u16 playedHours(void) const override;
         void playedHours(u16 v) override;
         [[nodiscard]] u8 playedMinutes(void) const override;

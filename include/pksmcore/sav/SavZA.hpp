@@ -45,6 +45,7 @@ namespace pksm
         static constexpr u32 KBoxWallpapers = 0x2EB1B190;
         static constexpr u32 KMoney = 0x4F35D0DD;
         static constexpr u32 KPlayedSeconds = 0xCE3AF8F2;
+        static constexpr u32 KTicketPointsRoyale = 0x9A730DE1;
 
     public:
         static constexpr size_t SIZE_G9ZA_100 = 0x2F3284; // v1.0.0
@@ -70,9 +71,9 @@ namespace pksm
         void language(Language v) override;
         [[nodiscard]] u32 money(void) const override;
         void money(u32 v) override;
-        [[nodiscard]] u32 BP(void) const override { return 0; }
-        void BP(u32) override {}
-        [[nodiscard]] u8 badges(void) const override { return 0; }
+        [[nodiscard]] u32 BP(void) const override;
+        void BP(u32 v) override;
+        [[nodiscard]] u8 badges(void) const override { return 0; } // Z-A has no gym badges
         [[nodiscard]] u16 playedHours(void) const override;
         void playedHours(u16 v) override;
         [[nodiscard]] u8 playedMinutes(void) const override;

@@ -241,6 +241,26 @@ namespace pksm
         LittleEndian::convertFrom<u32>(getBlock(KMoney)->decryptedData(), v);
     }
 
+    u32 SavZA::BP(void) const
+    {
+        auto block = getBlock(KTicketPointsRoyale);
+        if (!block)
+        {
+            return 0;
+        }
+        return LittleEndian::convertTo<u32>(block->decryptedData());
+    }
+
+    void SavZA::BP(u32 v)
+    {
+        auto block = getBlock(KTicketPointsRoyale);
+        if (!block)
+        {
+            return;
+        }
+        LittleEndian::convertFrom<u32>(block->decryptedData(), v);
+    }
+
     u16 SavZA::playedHours(void) const
     {
         auto block = getBlock(KPlayedSeconds);

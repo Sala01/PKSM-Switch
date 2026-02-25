@@ -317,6 +317,44 @@ namespace pksm
         LittleEndian::convertFrom<u32>(getBlock(KMoney)->decryptedData(), v);
     }
 
+    u32 SavSV::BP(void) const
+    {
+        auto block = getBlock(KLeaguePoints);
+        if (!block)
+        {
+            return 0;
+        }
+        return LittleEndian::convertTo<u32>(block->decryptedData());
+    }
+
+    void SavSV::BP(u32 v)
+    {
+        auto block = getBlock(KLeaguePoints);
+        if (!block)
+        {
+            return;
+        }
+        LittleEndian::convertFrom<u32>(block->decryptedData(), v);
+    }
+
+    u8 SavSV::badges(void) const
+    {
+        static constexpr u32 gymBadgeKeys[] = {
+            KBadgeElectric, KBadgePsychic, KBadgeGhost, KBadgeIce,
+            KBadgeGrass, KBadgeWater, KBadgeBug, KBadgeNormal,
+        };
+        u8 count = 0;
+        for (auto key : gymBadgeKeys)
+        {
+            auto block = getBlock(key);
+            if (block && block->decryptedData()[0] != 0)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
     // SV uses int32 fields for play time (unlike Z-A's double-precision seconds)
     u16 SavSV::playedHours(void) const
     {
