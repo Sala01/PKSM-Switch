@@ -47,6 +47,7 @@ namespace pksm
         static constexpr u32 KPlayTime = 0xEDAFF794;
         static constexpr u32 KLeaguePoints = 0xADB4FE17;
         static constexpr u32 KZukan = 0x0DEAAEBD;
+        static constexpr u32 KZukanT1 = 0xF5D7C0E2;
 
         // Gym badge event flags
         static constexpr u32 KBadgeElectric = 0x8205ECAD;
