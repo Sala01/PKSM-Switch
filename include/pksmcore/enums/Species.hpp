@@ -1080,10 +1080,10 @@ namespace pksm
 
             constexpr explicit Species_impl(SpeciesEnum v) : v(v) {}
 
-            constexpr Species_impl(const Species_impl&)            = default;
-            constexpr Species_impl(Species_impl&&)                 = default;
-            constexpr Species_impl& operator=(const Species_impl&) = default;
-            constexpr Species_impl& operator=(Species_impl&&)      = default;
+            constexpr Species_impl(const Species_impl &) = default;
+            constexpr Species_impl(Species_impl &&) = default;
+            constexpr Species_impl &operator=(const Species_impl &) = default;
+            constexpr Species_impl &operator=(Species_impl &&) = default;
 
         public:
             template <std::integral T>
@@ -1095,9 +1095,9 @@ namespace pksm
             constexpr operator SpeciesEnum() const noexcept { return v; }
 
             [[nodiscard]] constexpr std::strong_ordering operator<=>(
-                const Species_impl& other) const noexcept = default;
+                const Species_impl &other) const noexcept = default;
 
-            [[nodiscard]] const std::string& localize(Language lang) const;
+            [[nodiscard]] const std::string &localize(Language lang) const;
         };
     }
 
@@ -1111,7 +1111,7 @@ namespace pksm
 
         constexpr Species() noexcept : impl(EnumType::None) {}
 
-        constexpr Species(const internal::Species_impl& impl) noexcept : impl(impl) {}
+        constexpr Species(const internal::Species_impl &impl) noexcept : impl(impl) {}
 
         constexpr explicit Species(std::underlying_type_t<EnumType> v) noexcept : impl(EnumType{v})
         {
@@ -1126,9 +1126,9 @@ namespace pksm
         constexpr operator EnumType() const noexcept { return static_cast<EnumType>(impl); }
 
         [[nodiscard]] constexpr std::strong_ordering operator<=>(
-            const Species& other) const noexcept = default;
+            const Species &other) const noexcept = default;
 
-        [[nodiscard]] const std::string& localize(Language lang) const
+        [[nodiscard]] const std::string &localize(Language lang) const
         {
             return impl.localize(lang);
         }
@@ -2033,7 +2033,7 @@ namespace pksm
         static constexpr internal::Species_impl Spectrier{EnumType::Spectrier};
         static constexpr internal::Species_impl Calyrex{EnumType::Calyrex};
 
-        // PLA and up
+        // PLA
         static constexpr internal::Species_impl Wyrdeer{EnumType::Wyrdeer};
         static constexpr internal::Species_impl Kleavor{EnumType::Kleavor};
         static constexpr internal::Species_impl Ursaluna{EnumType::Ursaluna};
@@ -2041,6 +2041,8 @@ namespace pksm
         static constexpr internal::Species_impl Sneasler{EnumType::Sneasler};
         static constexpr internal::Species_impl Overqwil{EnumType::Overqwil};
         static constexpr internal::Species_impl Enamorus{EnumType::Enamorus};
+
+        // SL, VL, ZA
         static constexpr internal::Species_impl Sprigatito{EnumType::Sprigatito};
         static constexpr internal::Species_impl Floragato{EnumType::Floragato};
         static constexpr internal::Species_impl Meowscarada{EnumType::Meowscarada};

@@ -967,23 +967,13 @@ namespace pksm
             }
             case GameVersion::SW:
             case GameVersion::SH:
-            {
-                static const std::set<Ability> items = std::invoke([]()
-                    { return create_set_consecutive<Ability>(Ability::Stench, Ability::AsOneG); });
-                return items;
-            }
             case GameVersion::PLA:
-            {
-                static const std::set<Ability> items = std::invoke([]()
-                    { return create_set_consecutive<Ability>(Ability::Stench, Ability::AsOneG); }); // according to PKHeX, max ability is also AsOneG?
-                return items;
-            }
             case GameVersion::SL:
             case GameVersion::VL:
             case GameVersion::ZA:
             {
                 static const std::set<Ability> items = std::invoke([]()
-                    { return create_set_consecutive<Ability>(Ability::Stench, Ability::AsOneG); });
+                    { return create_set_consecutive<Ability>(Ability::Stench, Ability::AsOneG); }); // AsOneG for all these games
                 return items;
             }
             default:
@@ -1004,7 +994,7 @@ namespace pksm
             version == GameVersion::ZA)
         {
             static const std::set<Ball> items = std::invoke(
-                []() { return create_set_consecutive<Ball>(Ball::Master, Ball::Beast); });
+                []() { return create_set_consecutive<Ball>(Ball::Master, Ball::Beast); }); // LAOrigin exists in these games too technically, but Beast for now
             return items;
         }
         switch ((Generation)version)
@@ -1273,13 +1263,11 @@ namespace pksm
                 return Ability::Neuroforce;
             case GameVersion::SW:
             case GameVersion::SH:
-                return Ability::AsOneG;
             case GameVersion::PLA:
-                return Ability::AsOneG; // supposedly also AsOneG
             case GameVersion::SL:
             case GameVersion::VL:
             case GameVersion::ZA:
-                return Ability::AsOneG;
+                return Ability::AsOneG; // supposedly also AsOneG for all these
             default:
                 return Ability::None;
         }
@@ -1423,7 +1411,7 @@ namespace pksm
         }
     }
 
-    u8 VersionTables::movePP(pksm::Generation gen, Move move, u8 ppUps) // TODO: implement PLA pp? not really sure
+    u8 VersionTables::movePP(pksm::Generation gen, Move move, u8 ppUps)
     {
         if (move == pksm::Move::INVALID || move == pksm::Move::None ||
             size_t(move) >= internal::PP_G8.size())
