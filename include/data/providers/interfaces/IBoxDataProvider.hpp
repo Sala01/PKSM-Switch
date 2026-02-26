@@ -35,4 +35,18 @@ public:
         int boxIndex,
         int slotIndex
     ) const = 0;
+
+    // Write a full Pokemon to a specific box slot.
+    // Unlike SetPokemonData (which only has species/form/shiny), this accepts
+    // the complete PKX data needed for persistence.
+    virtual bool WritePokemon(int boxIndex, int slotIndex, const pksm::PKX& pkx) {
+        (void)boxIndex; (void)slotIndex; (void)pkx;
+        return false;
+    }
+
+    // Clear a specific box slot, marking it as empty.
+    virtual bool ClearSlot(int boxIndex, int slotIndex) {
+        (void)boxIndex; (void)slotIndex;
+        return false;
+    }
 };
