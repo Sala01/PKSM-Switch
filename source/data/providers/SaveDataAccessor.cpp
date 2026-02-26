@@ -42,6 +42,8 @@ pksm::saves::Generation ToAppGeneration(pksm::Generation gen) {
             return pksm::saves::Generation::LGPE;
         case pksm::Generation::EIGHT:
             return pksm::saves::Generation::EIGHT;
+        case pksm::Generation::NINE:
+            return pksm::saves::Generation::NINE;
         default:
             return pksm::saves::Generation::EIGHT;
     }
@@ -83,6 +85,8 @@ pksm::saves::BagPouch ToAppBagPouch(const pksm::Sav::Pouch pouch) {
             return AP::RotomPower;
         case SP::CatchingItem:
             return AP::CatchingItem;
+        case SP::MegaStones:
+            return AP::MegaStones;
         default:
             return AP::Unknown;
     }
@@ -171,6 +175,8 @@ pksm::saves::GameVersion ToAppGameVersion(pksm::GameVersion version) {
             return AGV::SH;
         case GV::PLA:
             return AGV::PLA;
+        case GV::ZA:
+            return AGV::ZA;
         default:
             return AGV::SW;
     }
@@ -333,6 +339,8 @@ bool SaveDataAccessor::saveChanges() {
                     return SP::RotomPower;
                 case AP::CatchingItem:
                     return SP::CatchingItem;
+                case AP::MegaStones:
+                    return SP::MegaStones;
                 case AP::Unknown:
                 default:
                     return std::nullopt;

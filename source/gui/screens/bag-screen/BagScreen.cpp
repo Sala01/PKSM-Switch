@@ -266,8 +266,31 @@ void BagScreen::BuildCategoriesForCurrentSave() {
     const bool is_swsh = (version == pksm::saves::GameVersion::SW) || (version == pksm::saves::GameVersion::SH);
     const bool is_lgpe = (version == pksm::saves::GameVersion::GP) || (version == pksm::saves::GameVersion::GE);
     const bool is_pla = (version == pksm::saves::GameVersion::PLA);
+    const bool is_za = (version == pksm::saves::GameVersion::ZA);
 
-    if (is_pla) {
+    if (is_za) {
+        categoryLabels = {
+            "Medicine",
+            "Poke Balls",
+            "Berries",
+            "Items",
+            "TMs",
+            "Mega Stones",
+            "Treasure",
+            "Key Items",
+        };
+
+        categoryPouches = {
+            pksm::saves::BagPouch::Medicine,
+            pksm::saves::BagPouch::Ball,
+            pksm::saves::BagPouch::Berry,
+            pksm::saves::BagPouch::NormalItem,
+            pksm::saves::BagPouch::TM,
+            pksm::saves::BagPouch::MegaStones,
+            pksm::saves::BagPouch::Treasure,
+            pksm::saves::BagPouch::KeyItem,
+        };
+    } else if (is_pla) {
         categoryLabels = {
             "Items",
             "Key Items",

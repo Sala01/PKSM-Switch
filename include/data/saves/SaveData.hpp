@@ -51,7 +51,8 @@ enum class GameVersion {
     SP,
     PLA,
     SL,
-    VL
+    VL,
+    ZA
 };
 
 enum class BagPouch {
@@ -70,7 +71,8 @@ enum class BagPouch {
     Ingredient,
     PCItem,
     RotomPower,
-    CatchingItem
+    CatchingItem,
+    MegaStones
 };
 
 struct BagItem {

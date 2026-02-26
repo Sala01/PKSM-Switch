@@ -207,6 +207,12 @@ void StorageScreen::InitializePokemonBoxes() {
 void StorageScreen::LoadBoxData() {
     LOG_DEBUG("Loading box data from provider...");
 
+    // reset Save Box data before loading new box data
+    if (pokemonSaveBox) {
+        pokemonSaveBox->SetBoxCount(0);
+        pokemonSaveBox->SetCurrentBox(0);
+    }
+
     auto currentSave = saveDataAccessor->getCurrentSaveData();
 
     // Bank boxes
@@ -223,8 +229,13 @@ void StorageScreen::LoadBoxData() {
     // Save boxes
     if (!currentSave || !pokemonSaveBox || !boxDataProvider) {
         LOG_DEBUG("No save data available, using fallback box data");
+        // Set a default box count if no save data available
         if (pokemonSaveBox) {
             pokemonSaveBox->SetBoxCount(1);
+            pksm::ui::BoxData emptyBox;
+            emptyBox.name = "Box 1";
+            pokemonSaveBox->SetBoxData(0, emptyBox);
+            // start at box 0
             pokemonSaveBox->SetCurrentBox(0);
         }
         LOG_DEBUG("Fallback box data loaded");

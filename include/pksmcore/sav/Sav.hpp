@@ -66,6 +66,8 @@ namespace pksm
             LGPE,
             SWSH,
             PLA,
+            SLVL,
+            ZA,
             RS,
             E,
             FRLG,
@@ -104,7 +106,8 @@ namespace pksm
             Ingredient,
             PCItem,
             RotomPower,
-            CatchingItem
+            CatchingItem,
+            MegaStones
         };
         enum class BadTransferReason
         {

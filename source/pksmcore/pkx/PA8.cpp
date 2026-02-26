@@ -25,6 +25,9 @@
  */
 
 #include "pkx/PA8.hpp"
+#include "pkx/PA9.hpp"
+#include "pkx/PK9.hpp"
+#include "sav/Sav.hpp"
 #include "utils/crypto.hpp"
 #include "utils/endian.hpp"
 #include "utils/flagUtil.hpp"
@@ -84,6 +87,103 @@ namespace pksm
     std::unique_ptr<PKX> PA8::clone(void) const
     {
         return PKX::getPKM<PA8>(data, isParty() ? PARTY_LENGTH : BOX_LENGTH);
+    }
+
+    std::unique_ptr<PKX> PA8::convertToG9(Sav& save) const
+    {
+        bool targetIsZA = (save.version() == GameVersion::ZA);
+
+        std::unique_ptr<PKX> pk9;
+        if (targetIsZA)
+        {
+            pk9 = PKX::getPKM<PA9>(nullptr, PA9::BOX_LENGTH);
+        }
+        else
+        {
+            pk9 = PKX::getPKM<PK9>(nullptr, PK9::BOX_LENGTH);
+        }
+
+        pk9->encryptionConstant(encryptionConstant());
+        pk9->species(species());
+        pk9->TID(TID());
+        pk9->SID(SID());
+        pk9->experience(experience());
+        pk9->PID(PID());
+
+        if (ability() == PersonalSWSH::ability(formSpecies(), abilityNumber() >> 1))
+        {
+            pk9->setAbility(abilityNumber() >> 1);
+        }
+        else
+        {
+            pk9->ability(ability());
+            pk9->abilityNumber(abilityNumber());
+        }
+
+        pk9->language(language());
+        pk9->heldItem(heldItem());
+        pk9->markValue(markValue());
+
+        for (Stat stat : {Stat::HP, Stat::ATK, Stat::DEF, Stat::SPATK, Stat::SPDEF, Stat::SPD})
+        {
+            pk9->ev(stat, ev(stat));
+            pk9->iv(stat, iv(stat));
+            pk9->hyperTrain(stat, hyperTrain(stat));
+        }
+
+        for (size_t i = 0; i < 4; i++)
+        {
+            pk9->move(i, move(i));
+            pk9->PPUp(i, PPUp(i));
+            pk9->PP(i, PP(i));
+            pk9->relearnMove(i, relearnMove(i));
+        }
+
+        pk9->egg(egg());
+        pk9->nicknamed(nicknamed());
+        pk9->nickname(nickname());
+        pk9->fatefulEncounter(fatefulEncounter());
+        pk9->gender(gender());
+        pk9->otGender(otGender());
+        pk9->alternativeForm(alternativeForm());
+        pk9->nature(nature());
+
+        pk9->version(version());
+        pk9->otName(otName());
+        pk9->otFriendship(otFriendship());
+        pk9->metDate(metDate());
+        pk9->eggDate(eggDate());
+        pk9->metLocation(metLocation());
+        pk9->eggLocation(eggLocation());
+        pk9->ball(ball());
+        pk9->metLevel(metLevel());
+        pk9->currentHandler(currentHandler());
+        pk9->htFriendship(htFriendship());
+
+        pk9->pkrsStrain(pkrsStrain());
+        pk9->pkrsDays(pkrsDays());
+
+        for (size_t i = 0; i < 6; i++)
+        {
+            pk9->contest(i, contest(i));
+        }
+
+        // PA8 ribbon support is stubbed; no ribbons are awarded in PLA
+
+        // PK9-specific: set TeraType from PersonalSV types
+        if (!targetIsZA)
+        {
+            auto* pk9sv = static_cast<PK9*>(pk9.get());
+            auto type1  = PersonalSV::type1(pk9->formSpecies());
+            u8 tera     = (type1 != Type::Normal) ? u8(type1)
+                                                  : u8(PersonalSV::type2(pk9->formSpecies()));
+            pk9sv->teraTypeOriginal(tera);
+            pk9sv->teraTypeOverride(tera);
+        }
+
+        pk9->refreshChecksum();
+
+        return pk9;
     }
 
     Generation PA8::generation(void) const

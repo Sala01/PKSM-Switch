@@ -62,23 +62,23 @@ BoxDataProvider::~BoxDataProvider() = default;
 pksm::Sav* BoxDataProvider::GetSavForSaveData(const pksm::saves::SaveData::Ref& saveData) const {
     if (!saveData) {
         cachedSav.reset();
-        cachedSaveName.clear();
+        cachedSaveDataPtr = nullptr;
         return nullptr;
     }
 
-    const auto &save_name = saveData->getName();
-    if (cachedSav && (cachedSaveName == save_name)) {
+    const auto *save_ptr = saveData.get();
+    if (cachedSav && (cachedSaveDataPtr == save_ptr)) {
         return cachedSav.get();
     }
 
     try {
-        cachedSav = LoadSavFromPath(save_name);
-        cachedSaveName = save_name;
+        cachedSav = LoadSavFromPath(saveData->getName());
+        cachedSaveDataPtr = save_ptr;
         return cachedSav.get();
     } catch (const std::exception &e) {
         pksm::utils::Logger::Error(std::string("[BoxDataProvider] Failed to cache save: ") + e.what());
         cachedSav.reset();
-        cachedSaveName.clear();
+        cachedSaveDataPtr = nullptr;
         return nullptr;
     }
 }
