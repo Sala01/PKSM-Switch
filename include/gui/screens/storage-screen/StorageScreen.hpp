@@ -1,6 +1,8 @@
 #pragma once
 
 #include <functional>
+#include <memory>
+#include <optional>
 #include <pu/Plutonium>
 
 #include "data/providers/interfaces/IBoxDataProvider.hpp"
@@ -57,6 +59,18 @@ namespace pksm::layout
 
         bool isSummaryOverlayVisible = false;
 
+        // Held Pokemon state for pick-up/place-down operations.
+        // When a user presses A on a non-empty slot, the Pokemon is "picked up" and
+        // stored here. A second A press places it at the destination (or swaps).
+        struct HeldPokemon {
+            std::unique_ptr<pksm::PKX> pkx;
+            IBoxDataProvider::Ref sourceProvider;
+            int sourceBox;
+            int sourceSlot;
+            bool fromBank;  // true = bank side, false = save side
+        };
+        std::optional<HeldPokemon> heldPokemon;
+
         // Layout constants
         static constexpr pu::i32 HEADER_TOP_MARGIN = 35;
         static constexpr pu::i32 SIDE_MARGIN = 70;
@@ -81,6 +95,12 @@ namespace pksm::layout
         void InitializePokemonBoxes();
         void InitializeFocusManagement();
         void SetActiveBox(ActiveBox box);
+
+        // Pick-up/place-down operations
+        void PickUp();
+        void PlaceDown();
+        void CancelPickUp();
+        void UpdateHelpFooter();
 
         // Override BaseLayout methods
         std::vector<pksm::ui::HelpItem> GetHelpOverlayItems() const override;

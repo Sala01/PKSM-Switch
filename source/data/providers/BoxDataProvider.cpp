@@ -110,11 +110,16 @@ bool BoxDataProvider::SetBoxData(
     int boxIndex,
     const pksm::ui::BoxData& boxData
 ) {
-    (void)saveData;
-    (void)boxIndex;
-    (void)boxData;
-    pksm::utils::Logger::Error("[BoxDataProvider] SetBoxData not implemented yet");
-    return false;
+    // BoxData only carries species/form/shiny per slot — not enough for full persistence.
+    // We can update the box name if the save supports it.
+    if (!saveData) return false;
+
+    auto *sav = GetSavForSaveData(saveData);
+    if (!sav) return false;
+    if (boxIndex < 0 || boxIndex >= sav->maxBoxes()) return false;
+
+    sav->boxName(static_cast<u8>(boxIndex), boxData.name);
+    return PersistSave(sav, saveData->getName());
 }
 
 bool BoxDataProvider::SetPokemonData(
@@ -123,11 +128,12 @@ bool BoxDataProvider::SetPokemonData(
     int slotIndex,
     const pksm::ui::BoxPokemonData& pokemonData
 ) {
-    (void)saveData;
-    (void)boxIndex;
-    (void)slotIndex;
-    (void)pokemonData;
-    pksm::utils::Logger::Error("[BoxDataProvider] SetPokemonData not implemented yet");
+    // BoxPokemonData only has species/form/shiny — not enough to write a full Pokemon.
+    // We can handle the "clear slot" case (species == 0).
+    if (pokemonData.isEmpty()) {
+        return ClearSlot(saveData, boxIndex, slotIndex);
+    }
+    pksm::utils::Logger::Error("[BoxDataProvider] SetPokemonData: use WritePokemon() for full PKX writes");
     return false;
 }
 
@@ -249,13 +255,91 @@ pksm::ui::BoxData BoxDataProvider::LoadBoxDataFromSave(
     }
 }
 
-bool BoxDataProvider::SaveBoxDataToFile(
+bool BoxDataProvider::WritePokemon(
     const pksm::saves::SaveData::Ref& saveData,
-    int boxIndex,
-    const pksm::ui::BoxData& boxData
-) const {
-    (void)saveData;
-    (void)boxIndex;
-    (void)boxData;
-    return false;
+    int boxIndex, int slotIndex, const pksm::PKX& pkx
+) {
+    if (!saveData) return false;
+
+    try {
+        auto *sav = GetSavForSaveData(saveData);
+        if (!sav) return false;
+        if (boxIndex < 0 || boxIndex >= sav->maxBoxes() || slotIndex < 0 || slotIndex >= 30)
+            return false;
+
+        // sav->pkm() setter expects a decrypted PKX — the save handles internal encryption
+        sav->pkm(pkx, static_cast<u8>(boxIndex), static_cast<u8>(slotIndex), false);
+        return PersistSave(sav, saveData->getName());
+    } catch (const std::exception &e) {
+        pksm::utils::Logger::Error(std::string("[BoxDataProvider] WritePokemon failed: ") + e.what());
+        return false;
+    }
+}
+
+bool BoxDataProvider::ClearSlot(
+    const pksm::saves::SaveData::Ref& saveData,
+    int boxIndex, int slotIndex
+) {
+    if (!saveData) return false;
+
+    try {
+        auto *sav = GetSavForSaveData(saveData);
+        if (!sav) return false;
+        if (boxIndex < 0 || boxIndex >= sav->maxBoxes() || slotIndex < 0 || slotIndex >= 30)
+            return false;
+
+        // Read the existing PKX to get the right type/size for this save, then zero it out.
+        // A zeroed PKX has species==0 which the read path treats as empty.
+        auto pk = sav->pkm(static_cast<u8>(boxIndex), static_cast<u8>(slotIndex));
+        if (pk) {
+            std::fill_n(pk->rawData().data(), pk->getLength(), u8(0));
+            sav->pkm(*pk, static_cast<u8>(boxIndex), static_cast<u8>(slotIndex), false);
+        }
+
+        return PersistSave(sav, saveData->getName());
+    } catch (const std::exception &e) {
+        pksm::utils::Logger::Error(std::string("[BoxDataProvider] ClearSlot failed: ") + e.what());
+        return false;
+    }
+}
+
+bool BoxDataProvider::PersistSave(pksm::Sav* sav, const std::string& saveName) const {
+    // Same persistence pipeline as SaveDataAccessor::saveChanges():
+    // finishEditing (encrypt) → write to file → commit device → beginEditing (decrypt for reuse)
+    try {
+        sav->finishEditing();
+
+        const bool isSaveDevicePath = saveName.rfind("save:/", 0) == 0;
+        const std::string savePath = isSaveDevicePath ? saveName : (std::string("save:/") + saveName);
+
+        const size_t outSize = static_cast<size_t>(sav->getEntireLengthIncludingFooter());
+
+        std::ofstream out(savePath, std::ios::binary | std::ios::trunc);
+        if (!out.good()) {
+            pksm::utils::Logger::Error("[BoxDataProvider] Failed to open save for writing: " + savePath);
+            sav->beginEditing();
+            return false;
+        }
+
+        out.write(reinterpret_cast<const char*>(sav->rawData().get()),
+                  static_cast<std::streamsize>(outSize));
+        out.flush();
+        out.close();
+
+        const Result rc = fsdevCommitDevice("save");
+        // Re-decrypt so subsequent reads/writes continue to work
+        sav->beginEditing();
+
+        if (R_FAILED(rc)) {
+            pksm::utils::Logger::Error("[BoxDataProvider] Failed to commit save device");
+            return false;
+        }
+
+        return true;
+    } catch (const std::exception &e) {
+        pksm::utils::Logger::Error(std::string("[BoxDataProvider] PersistSave failed: ") + e.what());
+        // Ensure save is back in editing mode even on failure
+        try { sav->beginEditing(); } catch (...) {}
+        return false;
+    }
 }

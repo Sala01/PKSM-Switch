@@ -41,8 +41,22 @@ StorageScreen::StorageScreen(
     // Initialize help footer
     InitializeHelpFooter();
 
-    // Set up button input handler for Back button
+    // A button: pick up or place down Pokemon
+    buttonHandler.RegisterButton(HidNpadButton_A, nullptr, [this]() {
+        if (isSummaryOverlayVisible) return;
+        if (heldPokemon.has_value()) {
+            PlaceDown();
+        } else {
+            PickUp();
+        }
+    });
+
+    // B button: cancel pick-up if holding, otherwise go back
     buttonHandler.RegisterButton(HidNpadButton_B, nullptr, [this]() {
+        if (heldPokemon.has_value()) {
+            CancelPickUp();
+            return;
+        }
         LOG_DEBUG("B button pressed, returning to main menu");
         if (this->onBack) {
             this->onBack();
@@ -50,7 +64,7 @@ StorageScreen::StorageScreen(
     });
 
     buttonHandler.RegisterButton(HidNpadButton_X, nullptr, [this]() {
-        if (isSummaryOverlayVisible) {
+        if (isSummaryOverlayVisible || heldPokemon.has_value()) {
             return;
         }
 
@@ -111,14 +125,7 @@ StorageScreen::StorageScreen(
     });
 
     // Set initial help items
-    std::vector<pksm::ui::HelpItem> helpItems = {
-        {{{pksm::ui::global::ButtonGlyph::A}}, "Select"},
-        {{{pksm::ui::global::ButtonGlyph::B}}, "Back to Main Menu"},
-        {{{pksm::ui::global::ButtonGlyph::X}}, "Summary"},
-        {{{pksm::ui::global::ButtonGlyph::L}, {pksm::ui::global::ButtonGlyph::R}}, "Switch Box"},
-        {{{pksm::ui::global::ButtonGlyph::DPad}}, "Navigate Box"},
-    };
-    helpFooter->SetHelpItems(helpItems);
+    UpdateHelpFooter();
 
     // Set up input handling
     this->SetOnInput(
@@ -356,6 +363,166 @@ void StorageScreen::SetActiveBox(ActiveBox box) {
     }
 
     pokemonBoxDirectionalHandler.ClearState();
+}
+
+void StorageScreen::PickUp() {
+    const bool isBank = (activeBox == ActiveBox::Bank);
+    pksm::ui::PokemonBox::Ref targetBox = isBank ? pokemonBankBox : pokemonSaveBox;
+    IBoxDataProvider::Ref provider = isBank ? bankBoxDataProvider : boxDataProvider;
+
+    if (!targetBox || !provider) return;
+
+    const int boxIndex = targetBox->GetCurrentBox();
+    const int slotIndex = targetBox->GetSelectedSlot();
+    if (slotIndex < 0) return;
+
+    const auto slotData = targetBox->GetPokemonData(boxIndex, slotIndex);
+    if (slotData.isEmpty()) return;
+
+    auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
+    auto pk = provider->GetPokemon(saveData, boxIndex, slotIndex);
+    if (!pk) return;
+
+    // Store the held Pokemon and visually clear the source slot
+    heldPokemon = HeldPokemon{std::move(pk), provider, boxIndex, slotIndex, isBank};
+    targetBox->SetPokemonData(boxIndex, slotIndex, pksm::ui::BoxPokemonData());
+
+    LOG_DEBUG("Picked up Pokemon from " + std::string(isBank ? "Bank" : "Save") +
+              " Box " + std::to_string(boxIndex) + " Slot " + std::to_string(slotIndex));
+    UpdateHelpFooter();
+}
+
+void StorageScreen::PlaceDown() {
+    if (!heldPokemon.has_value()) return;
+
+    const bool destIsBank = (activeBox == ActiveBox::Bank);
+    pksm::ui::PokemonBox::Ref destBox = destIsBank ? pokemonBankBox : pokemonSaveBox;
+    IBoxDataProvider::Ref destProvider = destIsBank ? bankBoxDataProvider : boxDataProvider;
+
+    if (!destBox || !destProvider) return;
+
+    const int destBoxIndex = destBox->GetCurrentBox();
+    const int destSlotIndex = destBox->GetSelectedSlot();
+    if (destSlotIndex < 0) return;
+
+    // Placing back on the same slot = cancel
+    if (destProvider == heldPokemon->sourceProvider &&
+        destBoxIndex == heldPokemon->sourceBox &&
+        destSlotIndex == heldPokemon->sourceSlot) {
+        CancelPickUp();
+        return;
+    }
+
+    auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
+    const auto destSlotData = destBox->GetPokemonData(destBoxIndex, destSlotIndex);
+
+    if (destSlotData.isEmpty()) {
+        // Place into empty slot
+        if (!destProvider->WritePokemon(saveData, destBoxIndex, destSlotIndex, *heldPokemon->pkx)) {
+            LOG_ERROR("Failed to write Pokemon to destination");
+            CancelPickUp();
+            return;
+        }
+        // Clear the source slot in the provider (data is already visually cleared)
+        heldPokemon->sourceProvider->ClearSlot(saveData, heldPokemon->sourceBox, heldPokemon->sourceSlot);
+
+        // Update destination visual
+        const auto& pk = *heldPokemon->pkx;
+        const u16 form_u16 = pk.alternativeForm();
+        const u8 form = form_u16 > 255 ? 0 : static_cast<u8>(form_u16);
+        destBox->SetPokemonData(destBoxIndex, destSlotIndex,
+            pksm::ui::BoxPokemonData(static_cast<u16>(pk.species()), form, pk.shiny()));
+
+        LOG_DEBUG("Placed Pokemon into " + std::string(destIsBank ? "Bank" : "Save") +
+                  " Box " + std::to_string(destBoxIndex) + " Slot " + std::to_string(destSlotIndex));
+    } else {
+        // Swap: read destination Pokemon, write held to destination, write dest to source
+        auto destPk = destProvider->GetPokemon(saveData, destBoxIndex, destSlotIndex);
+        if (!destPk) {
+            LOG_ERROR("Failed to read destination Pokemon for swap");
+            CancelPickUp();
+            return;
+        }
+
+        if (!destProvider->WritePokemon(saveData, destBoxIndex, destSlotIndex, *heldPokemon->pkx)) {
+            LOG_ERROR("Failed to write held Pokemon to destination during swap");
+            CancelPickUp();
+            return;
+        }
+
+        if (!heldPokemon->sourceProvider->WritePokemon(saveData, heldPokemon->sourceBox, heldPokemon->sourceSlot, *destPk)) {
+            LOG_ERROR("Failed to write destination Pokemon to source during swap");
+            // Destination already written — try to restore it
+            destProvider->WritePokemon(saveData, destBoxIndex, destSlotIndex, *destPk);
+            CancelPickUp();
+            return;
+        }
+
+        // Update both slot visuals
+        const auto& heldPkRef = *heldPokemon->pkx;
+        const u16 heldForm = heldPkRef.alternativeForm();
+        destBox->SetPokemonData(destBoxIndex, destSlotIndex,
+            pksm::ui::BoxPokemonData(static_cast<u16>(heldPkRef.species()),
+                                     heldForm > 255 ? 0 : static_cast<u8>(heldForm),
+                                     heldPkRef.shiny()));
+
+        const u16 destForm = destPk->alternativeForm();
+        // Update source slot visual — find the right PokemonBox for the source side
+        pksm::ui::PokemonBox::Ref sourceBox = heldPokemon->fromBank ? pokemonBankBox : pokemonSaveBox;
+        if (sourceBox) {
+            sourceBox->SetPokemonData(heldPokemon->sourceBox, heldPokemon->sourceSlot,
+                pksm::ui::BoxPokemonData(static_cast<u16>(destPk->species()),
+                                         destForm > 255 ? 0 : static_cast<u8>(destForm),
+                                         destPk->shiny()));
+        }
+
+        LOG_DEBUG("Swapped Pokemon between " + std::string(heldPokemon->fromBank ? "Bank" : "Save") +
+                  " and " + std::string(destIsBank ? "Bank" : "Save"));
+    }
+
+    heldPokemon.reset();
+    UpdateHelpFooter();
+}
+
+void StorageScreen::CancelPickUp() {
+    if (!heldPokemon.has_value()) return;
+
+    // Restore the source slot visual from the held PKX data
+    pksm::ui::PokemonBox::Ref sourceBox = heldPokemon->fromBank ? pokemonBankBox : pokemonSaveBox;
+    if (sourceBox) {
+        const auto& pk = *heldPokemon->pkx;
+        const u16 form_u16 = pk.alternativeForm();
+        const u8 form = form_u16 > 255 ? 0 : static_cast<u8>(form_u16);
+        sourceBox->SetPokemonData(heldPokemon->sourceBox, heldPokemon->sourceSlot,
+            pksm::ui::BoxPokemonData(static_cast<u16>(pk.species()), form, pk.shiny()));
+    }
+
+    LOG_DEBUG("Cancelled pick-up");
+    heldPokemon.reset();
+    UpdateHelpFooter();
+}
+
+void StorageScreen::UpdateHelpFooter() {
+    if (!helpFooter) return;
+
+    std::vector<pksm::ui::HelpItem> helpItems;
+    if (heldPokemon.has_value()) {
+        helpItems = {
+            {{{pksm::ui::global::ButtonGlyph::A}}, "Place / Swap"},
+            {{{pksm::ui::global::ButtonGlyph::B}}, "Cancel"},
+            {{{pksm::ui::global::ButtonGlyph::L}, {pksm::ui::global::ButtonGlyph::R}}, "Switch Box"},
+            {{{pksm::ui::global::ButtonGlyph::DPad}}, "Navigate Box"},
+        };
+    } else {
+        helpItems = {
+            {{{pksm::ui::global::ButtonGlyph::A}}, "Pick Up"},
+            {{{pksm::ui::global::ButtonGlyph::B}}, "Back to Main Menu"},
+            {{{pksm::ui::global::ButtonGlyph::X}}, "Summary"},
+            {{{pksm::ui::global::ButtonGlyph::L}, {pksm::ui::global::ButtonGlyph::R}}, "Switch Box"},
+            {{{pksm::ui::global::ButtonGlyph::DPad}}, "Navigate Box"},
+        };
+    }
+    helpFooter->SetHelpItems(helpItems);
 }
 
 }  // namespace pksm::layout

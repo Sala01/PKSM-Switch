@@ -39,14 +39,30 @@ public:
     // Write a full Pokemon to a specific box slot.
     // Unlike SetPokemonData (which only has species/form/shiny), this accepts
     // the complete PKX data needed for persistence.
+    // The no-SaveData version is used by providers that don't need save context (e.g., bank).
     virtual bool WritePokemon(int boxIndex, int slotIndex, const pksm::PKX& pkx) {
         (void)boxIndex; (void)slotIndex; (void)pkx;
         return false;
+    }
+
+    // SaveData-accepting overload for providers that need save context (e.g., BoxDataProvider).
+    // Default delegates to the no-SaveData version.
+    virtual bool WritePokemon(
+        const pksm::saves::SaveData::Ref& saveData,
+        int boxIndex, int slotIndex, const pksm::PKX& pkx) {
+        (void)saveData;
+        return WritePokemon(boxIndex, slotIndex, pkx);
     }
 
     // Clear a specific box slot, marking it as empty.
     virtual bool ClearSlot(int boxIndex, int slotIndex) {
         (void)boxIndex; (void)slotIndex;
         return false;
+    }
+
+    // SaveData-accepting overload for providers that need save context.
+    virtual bool ClearSlot(const pksm::saves::SaveData::Ref& saveData, int boxIndex, int slotIndex) {
+        (void)saveData;
+        return ClearSlot(boxIndex, slotIndex);
     }
 };
