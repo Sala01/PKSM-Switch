@@ -717,6 +717,16 @@ namespace pksm
         data[0xAF] = v;
     }
 
+    u32 PK7::formDuration(void) const
+    {
+        return LittleEndian::convertTo<u32>(data + 0x3C);
+    }
+
+    void PK7::formDuration(u32 v)
+    {
+        LittleEndian::convertFrom<u32>(data + 0x3C, v);
+    }
+
     std::string PK7::otName(void) const
     {
         return StringUtils::transString67(StringUtils::getString(data, 0xB0, 13));
@@ -1388,6 +1398,7 @@ namespace pksm
 
         pk8->otFriendship(otFriendship());
         pk8->origNature(nature());
+        pk8->formDuration(formDuration());
 
         // Remove totem forms (don't exist in Gen 8+)
         {
