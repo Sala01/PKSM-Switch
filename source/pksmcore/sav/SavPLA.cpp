@@ -29,6 +29,7 @@
 #include "utils/endian.hpp"
 #include "utils/i18n.hpp"
 #include "utils/utils.hpp"
+#include "utils/VersionTables.hpp"
 #include <algorithm>
 #include <ranges>
 
@@ -339,5 +340,107 @@ namespace pksm
                 }
             }
         }
+    }
+
+    // PLA Pokedex: PokedexSaveData in KZukan block
+    // Research entries start at offset 0x70, each 0x58 bytes, indexed by species ID (0-980)
+    // Entry layout: Flags(u32)@0x00, ResearchRate(u16)@0x08, NumObtained(u16)@0x0A, SelectedForm(u8)@0x50
+
+    namespace
+    {
+        constexpr size_t DEX_RESEARCH_OFFSET = 0x70;
+        constexpr size_t DEX_RESEARCH_ENTRY_SIZE = 0x58;
+        constexpr int DEX_MAX_SPECIES = 981;
+    }
+
+    void SavPLA::dex(const PKX& pk)
+    {
+        if (pk.egg())
+        {
+            return;
+        }
+
+        auto block = getBlock(KZukan);
+        if (!block)
+        {
+            return;
+        }
+
+        u16 species = u16(pk.species());
+        if (species >= DEX_MAX_SPECIES)
+        {
+            return;
+        }
+
+        u8* entry = block->decryptedData() + DEX_RESEARCH_OFFSET + species * DEX_RESEARCH_ENTRY_SIZE;
+
+        // Set HasEverBeenUpdated flag (bit 0)
+        u32 flags = LittleEndian::convertTo<u32>(entry + 0x00);
+        flags |= 1u;
+        LittleEndian::convertFrom<u32>(entry + 0x00, flags);
+
+        // Increment NumObtained
+        u16 numObtained = LittleEndian::convertTo<u16>(entry + 0x0A);
+        if (numObtained < 0xFFFF)
+        {
+            LittleEndian::convertFrom<u16>(entry + 0x0A, u16(numObtained + 1));
+        }
+
+        // Set SelectedForm
+        entry[0x50] = pk.alternativeForm();
+    }
+
+    int SavPLA::dexSeen(void) const
+    {
+        auto block = getBlock(KZukan);
+        if (!block)
+        {
+            return 0;
+        }
+
+        u8* data = block->decryptedData();
+        int count = 0;
+        for (const auto& spec : availableSpecies())
+        {
+            u16 species = u16(spec);
+            if (species >= DEX_MAX_SPECIES)
+            {
+                continue;
+            }
+            u8* entry = data + DEX_RESEARCH_OFFSET + species * DEX_RESEARCH_ENTRY_SIZE;
+            u32 flags = LittleEndian::convertTo<u32>(entry + 0x00);
+            if (flags & 1u) // HasEverBeenUpdated
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    int SavPLA::dexCaught(void) const
+    {
+        auto block = getBlock(KZukan);
+        if (!block)
+        {
+            return 0;
+        }
+
+        u8* data = block->decryptedData();
+        int count = 0;
+        for (const auto& spec : availableSpecies())
+        {
+            u16 species = u16(spec);
+            if (species >= DEX_MAX_SPECIES)
+            {
+                continue;
+            }
+            u8* entry      = data + DEX_RESEARCH_OFFSET + species * DEX_RESEARCH_ENTRY_SIZE;
+            u16 numObtained = LittleEndian::convertTo<u16>(entry + 0x0A);
+            if (numObtained > 0)
+            {
+                count++;
+            }
+        }
+        return count;
     }
 }

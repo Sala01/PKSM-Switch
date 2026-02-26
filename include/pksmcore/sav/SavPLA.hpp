@@ -112,9 +112,9 @@ namespace pksm
 
         void cryptBoxData(bool crypted) override;
 
-        void dex(const PKX &) override {}
-        [[nodiscard]] int dexSeen(void) const override { return 0; }
-        [[nodiscard]] int dexCaught(void) const override { return 0; }
+        void dex(const PKX &pk) override;
+        [[nodiscard]] int dexSeen(void) const override;
+        [[nodiscard]] int dexCaught(void) const override;
 
         void mysteryGift(const WCX &, int &) override {}
         [[nodiscard]] std::unique_ptr<WCX> mysteryGift(int) const override { return nullptr; }
