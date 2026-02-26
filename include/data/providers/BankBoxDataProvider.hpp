@@ -28,6 +28,11 @@ private:
 
     void EnsureLoaded() const;
 
+    // Persist all bank entries to the .bnk file on disk
+    bool SaveBank() const;
+    // Persist box names to the .json file on disk
+    bool SaveNames() const;
+
 public:
     explicit BankBoxDataProvider(std::string bankName = "pksm_1");
     ~BankBoxDataProvider() override;
@@ -48,4 +53,11 @@ public:
         const pksm::saves::SaveData::Ref &saveData,
         int boxIndex,
         int slotIndex) const override;
+
+    // Write a full Pokemon to a bank slot (encrypts and persists to disk)
+    bool WritePokemon(int boxIndex, int slotIndex, const pksm::PKX& pkx) override;
+    // Clear a bank slot, marking it as empty
+    bool ClearSlot(int boxIndex, int slotIndex) override;
+    // Update a box name and persist to disk
+    bool SetBoxName(int boxIndex, const std::string& name);
 };
