@@ -898,11 +898,13 @@ namespace pksm
             }
             else if (wc8.BP())
             {
-                // TODO
+                BP(BP() + wc8.objectQuantity(0));
             }
             else if (wc8.clothing())
             {
-                // TODO
+                // Clothing gifts require the FashionUnlock8 block (0xd224f9ac)
+                // which stores 15 apparel regions × 0x80 bytes of owned/new bit flags.
+                // WC8 object() maps to a specific region + slot. Not yet implemented.
             }
         }
     }
