@@ -10,6 +10,8 @@
 
 #include <switch.h>
 
+#include "pksmcore/pkx/PA8.hpp"
+#include "pksmcore/pkx/PK8.hpp"
 #include "pksmcore/pkx/PKX.hpp"
 #include "pksmcore/sav/Sav.hpp"
 #include "utils/Logger.hpp"
@@ -51,6 +53,84 @@ std::unique_ptr<pksm::Sav> LoadSavFromPath(const std::string &save_name) {
     }
 
     return sav;
+}
+
+// Convert PK8 → PA8 field-by-field for PLA saves.
+// convertToG8() returns std::unique_ptr<PK8> and cannot return PA8 (different layout/size),
+// so this helper is used at the provider level when the target save is PLA.
+std::unique_ptr<pksm::PKX> ConvertPK8toPA8(const pksm::PK8& pk8) {
+    auto pa8 = pksm::PKX::getPKM<pksm::PA8>(nullptr, pksm::PA8::BOX_LENGTH);
+
+    pa8->encryptionConstant(pk8.encryptionConstant());
+    pa8->species(pk8.species());
+    pa8->TID(pk8.TID());
+    pa8->SID(pk8.SID());
+    pa8->experience(pk8.experience());
+    pa8->PID(pk8.PID());
+
+    if (pk8.ability() == pksm::PersonalSWSH::ability(pk8.formSpecies(), pk8.abilityNumber() >> 1))
+    {
+        pa8->setAbility(pk8.abilityNumber() >> 1);
+    }
+    else
+    {
+        pa8->ability(pk8.ability());
+        pa8->abilityNumber(pk8.abilityNumber());
+    }
+
+    pa8->language(pk8.language());
+    pa8->heldItem(pk8.heldItem());
+    pa8->markValue(pk8.markValue());
+
+    for (pksm::Stat stat : {pksm::Stat::HP, pksm::Stat::ATK, pksm::Stat::DEF,
+                            pksm::Stat::SPATK, pksm::Stat::SPDEF, pksm::Stat::SPD})
+    {
+        pa8->ev(stat, pk8.ev(stat));
+        pa8->iv(stat, pk8.iv(stat));
+        pa8->hyperTrain(stat, pk8.hyperTrain(stat));
+    }
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        pa8->move(i, pk8.move(i));
+        pa8->PPUp(i, pk8.PPUp(i));
+        pa8->PP(i, pk8.PP(i));
+        pa8->relearnMove(i, pk8.relearnMove(i));
+    }
+
+    pa8->egg(pk8.egg());
+    pa8->nicknamed(pk8.nicknamed());
+    pa8->nickname(pk8.nickname());
+    pa8->fatefulEncounter(pk8.fatefulEncounter());
+    pa8->gender(pk8.gender());
+    pa8->otGender(pk8.otGender());
+    pa8->alternativeForm(pk8.alternativeForm());
+    pa8->nature(pk8.nature());
+
+    pa8->version(pk8.version());
+    pa8->otName(pk8.otName());
+    pa8->otFriendship(pk8.otFriendship());
+    pa8->metDate(pk8.metDate());
+    pa8->eggDate(pk8.eggDate());
+    pa8->metLocation(pk8.metLocation());
+    pa8->eggLocation(pk8.eggLocation());
+    pa8->ball(pk8.ball());
+    pa8->metLevel(pk8.metLevel());
+    pa8->currentHandler(pk8.currentHandler());
+    pa8->htFriendship(pk8.htFriendship());
+
+    pa8->pkrsStrain(pk8.pkrsStrain());
+    pa8->pkrsDays(pk8.pkrsDays());
+
+    for (size_t i = 0; i < 6; i++)
+    {
+        pa8->contest(i, pk8.contest(i));
+    }
+
+    // PA8 doesn't use ribbons (PLA has no ribbon system)
+
+    pa8->refreshChecksum();
+    return pa8;
 }
 
 } // namespace
@@ -342,4 +422,25 @@ bool BoxDataProvider::PersistSave(pksm::Sav* sav, const std::string& saveName) c
         try { sav->beginEditing(); } catch (...) {}
         return false;
     }
+}
+
+std::unique_ptr<pksm::PKX> BoxDataProvider::PrepareForWrite(
+    const pksm::saves::SaveData::Ref& saveData,
+    const pksm::PKX& pkx)
+{
+    auto* sav = GetSavForSaveData(saveData);
+    if (!sav) return nullptr;
+
+    // PLA special case: convertToG8() returns std::unique_ptr<PK8> (can't return PA8
+    // due to the fixed return type), so we detect PLA target and post-convert PK8→PA8.
+    if (sav->version() == pksm::GameVersion::PLA)
+    {
+        if (pkx.extension() == ".pa8") return pkx.clone(); // Already native format
+        auto pk8 = pkx.convertToG8(*sav);
+        if (!pk8) return nullptr;
+        return ConvertPK8toPA8(*pk8);
+    }
+
+    // All other saves: Sav::transfer() dispatches to the correct convertToGX()
+    return sav->transfer(pkx);
 }

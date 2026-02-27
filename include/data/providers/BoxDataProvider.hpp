@@ -60,4 +60,9 @@ public:
     bool ClearSlot(
         const pksm::saves::SaveData::Ref &saveData,
         int boxIndex, int slotIndex) override;
+
+    // Convert PKX to the native format for this save before writing
+    std::unique_ptr<pksm::PKX> PrepareForWrite(
+        const pksm::saves::SaveData::Ref &saveData,
+        const pksm::PKX &pkx) override;
 };

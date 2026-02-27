@@ -25,6 +25,9 @@
  */
 
 #include "pkx/PK9.hpp"
+#include "pkx/PA9.hpp"
+#include "pkx/PK8.hpp"
+#include "sav/Sav.hpp"
 #include "utils/crypto.hpp"
 #include "utils/endian.hpp"
 #include "utils/flagUtil.hpp"
@@ -336,6 +339,192 @@ namespace pksm
     std::unique_ptr<PKX> PK9::clone(void) const
     {
         return PKX::getPKM<PK9>(data, isParty() ? PARTY_LENGTH : BOX_LENGTH);
+    }
+
+    std::unique_ptr<PKX> PK9::convertToG9(Sav& save) const
+    {
+        if (save.version() == GameVersion::ZA)
+        {
+            // PK9 and PA9 share identical binary layout — raw-data copy
+            auto pa9 = PKX::getPKM<PA9>(data, BOX_LENGTH);
+            pa9->refreshChecksum();
+            return pa9;
+        }
+        return clone();
+    }
+
+    std::unique_ptr<PK8> PK9::convertToG8(Sav& save) const
+    {
+        auto pk8 = PKX::getPKM<PK8>(nullptr, PK8::BOX_LENGTH);
+
+        pk8->encryptionConstant(encryptionConstant());
+        pk8->species(species());
+        pk8->TID(TID());
+        pk8->SID(SID());
+        pk8->experience(experience());
+        pk8->PID(PID());
+
+        if (ability() == PersonalSWSH::ability(formSpecies(), abilityNumber() >> 1))
+        {
+            pk8->setAbility(abilityNumber() >> 1);
+        }
+        else
+        {
+            pk8->ability(ability());
+            pk8->abilityNumber(abilityNumber());
+        }
+
+        pk8->language(language());
+        pk8->heldItem(heldItem());
+        pk8->markValue(markValue());
+
+        for (Stat stat : {Stat::HP, Stat::ATK, Stat::DEF, Stat::SPATK, Stat::SPDEF, Stat::SPD})
+        {
+            pk8->ev(stat, ev(stat));
+            pk8->iv(stat, iv(stat));
+            pk8->hyperTrain(stat, hyperTrain(stat));
+        }
+
+        for (size_t i = 0; i < 4; i++)
+        {
+            pk8->move(i, move(i));
+            pk8->PPUp(i, PPUp(i));
+            pk8->PP(i, PP(i));
+            pk8->relearnMove(i, relearnMove(i));
+        }
+
+        pk8->egg(egg());
+        pk8->nicknamed(nicknamed());
+        pk8->nickname(nickname());
+        pk8->fatefulEncounter(fatefulEncounter());
+        pk8->gender(gender());
+        pk8->otGender(otGender());
+        pk8->alternativeForm(alternativeForm());
+        pk8->nature(nature());
+        pk8->origNature(nature());
+
+        pk8->version(version());
+        pk8->otName(otName());
+        pk8->otFriendship(otFriendship());
+        pk8->metDate(metDate());
+        pk8->eggDate(eggDate());
+        pk8->metLocation(metLocation());
+        pk8->eggLocation(eggLocation());
+        pk8->ball(ball());
+        pk8->metLevel(metLevel());
+        pk8->currentHandler(currentHandler());
+        pk8->htFriendship(htFriendship());
+
+        pk8->pkrsStrain(pkrsStrain());
+        pk8->pkrsDays(pkrsDays());
+
+        for (size_t i = 0; i < 6; i++)
+        {
+            pk8->contest(i, contest(i));
+        }
+
+        pk8->ribbon(Ribbon::ChampionKalos, ribbon(Ribbon::ChampionKalos));
+        pk8->ribbon(Ribbon::ChampionG3Hoenn, ribbon(Ribbon::ChampionG3Hoenn));
+        pk8->ribbon(Ribbon::ChampionSinnoh, ribbon(Ribbon::ChampionSinnoh));
+        pk8->ribbon(Ribbon::BestFriends, ribbon(Ribbon::BestFriends));
+        pk8->ribbon(Ribbon::Training, ribbon(Ribbon::Training));
+        pk8->ribbon(Ribbon::BattlerSkillful, ribbon(Ribbon::BattlerSkillful));
+        pk8->ribbon(Ribbon::BattlerExpert, ribbon(Ribbon::BattlerExpert));
+        pk8->ribbon(Ribbon::Effort, ribbon(Ribbon::Effort));
+        pk8->ribbon(Ribbon::Alert, ribbon(Ribbon::Alert));
+        pk8->ribbon(Ribbon::Shock, ribbon(Ribbon::Shock));
+        pk8->ribbon(Ribbon::Downcast, ribbon(Ribbon::Downcast));
+        pk8->ribbon(Ribbon::Careless, ribbon(Ribbon::Careless));
+        pk8->ribbon(Ribbon::Relax, ribbon(Ribbon::Relax));
+        pk8->ribbon(Ribbon::Snooze, ribbon(Ribbon::Snooze));
+        pk8->ribbon(Ribbon::Smile, ribbon(Ribbon::Smile));
+        pk8->ribbon(Ribbon::Gorgeous, ribbon(Ribbon::Gorgeous));
+        pk8->ribbon(Ribbon::Royal, ribbon(Ribbon::Royal));
+        pk8->ribbon(Ribbon::GorgeousRoyal, ribbon(Ribbon::GorgeousRoyal));
+        pk8->ribbon(Ribbon::Artist, ribbon(Ribbon::Artist));
+        pk8->ribbon(Ribbon::Footprint, ribbon(Ribbon::Footprint));
+        pk8->ribbon(Ribbon::Record, ribbon(Ribbon::Record));
+        pk8->ribbon(Ribbon::Legend, ribbon(Ribbon::Legend));
+        pk8->ribbon(Ribbon::Country, ribbon(Ribbon::Country));
+        pk8->ribbon(Ribbon::National, ribbon(Ribbon::National));
+        pk8->ribbon(Ribbon::Earth, ribbon(Ribbon::Earth));
+        pk8->ribbon(Ribbon::World, ribbon(Ribbon::World));
+        pk8->ribbon(Ribbon::Classic, ribbon(Ribbon::Classic));
+        pk8->ribbon(Ribbon::Premier, ribbon(Ribbon::Premier));
+        pk8->ribbon(Ribbon::Event, ribbon(Ribbon::Event));
+        pk8->ribbon(Ribbon::Birthday, ribbon(Ribbon::Birthday));
+        pk8->ribbon(Ribbon::Special, ribbon(Ribbon::Special));
+        pk8->ribbon(Ribbon::Souvenir, ribbon(Ribbon::Souvenir));
+        pk8->ribbon(Ribbon::Wishing, ribbon(Ribbon::Wishing));
+        pk8->ribbon(Ribbon::ChampionBattle, ribbon(Ribbon::ChampionBattle));
+        pk8->ribbon(Ribbon::ChampionRegional, ribbon(Ribbon::ChampionRegional));
+        pk8->ribbon(Ribbon::ChampionNational, ribbon(Ribbon::ChampionNational));
+        pk8->ribbon(Ribbon::ChampionWorld, ribbon(Ribbon::ChampionWorld));
+        pk8->ribbon(Ribbon::MemoryContest, ribbon(Ribbon::MemoryContest));
+        pk8->ribbon(Ribbon::MemoryBattle, ribbon(Ribbon::MemoryBattle));
+        pk8->ribbon(Ribbon::ChampionG6Hoenn, ribbon(Ribbon::ChampionG6Hoenn));
+        pk8->ribbon(Ribbon::ContestStar, ribbon(Ribbon::ContestStar));
+        pk8->ribbon(Ribbon::MasterCoolness, ribbon(Ribbon::MasterCoolness));
+        pk8->ribbon(Ribbon::MasterBeauty, ribbon(Ribbon::MasterBeauty));
+        pk8->ribbon(Ribbon::MasterCuteness, ribbon(Ribbon::MasterCuteness));
+        pk8->ribbon(Ribbon::MasterCleverness, ribbon(Ribbon::MasterCleverness));
+        pk8->ribbon(Ribbon::MasterToughness, ribbon(Ribbon::MasterToughness));
+        pk8->ribbon(Ribbon::ChampionAlola, ribbon(Ribbon::ChampionAlola));
+        pk8->ribbon(Ribbon::BattleRoyale, ribbon(Ribbon::BattleRoyale));
+        pk8->ribbon(Ribbon::BattleTreeGreat, ribbon(Ribbon::BattleTreeGreat));
+        pk8->ribbon(Ribbon::BattleTreeMaster, ribbon(Ribbon::BattleTreeMaster));
+        pk8->ribbon(Ribbon::ChampionGalar, ribbon(Ribbon::ChampionGalar));
+        pk8->ribbon(Ribbon::TowerMaster, ribbon(Ribbon::TowerMaster));
+        pk8->ribbon(Ribbon::MasterRank, ribbon(Ribbon::MasterRank));
+        pk8->ribbon(Ribbon::MarkLunchtime, ribbon(Ribbon::MarkLunchtime));
+        pk8->ribbon(Ribbon::MarkSleepyTime, ribbon(Ribbon::MarkSleepyTime));
+        pk8->ribbon(Ribbon::MarkDusk, ribbon(Ribbon::MarkDusk));
+        pk8->ribbon(Ribbon::MarkDawn, ribbon(Ribbon::MarkDawn));
+        pk8->ribbon(Ribbon::MarkCloudy, ribbon(Ribbon::MarkCloudy));
+        pk8->ribbon(Ribbon::MarkRainy, ribbon(Ribbon::MarkRainy));
+        pk8->ribbon(Ribbon::MarkStormy, ribbon(Ribbon::MarkStormy));
+        pk8->ribbon(Ribbon::MarkSnowy, ribbon(Ribbon::MarkSnowy));
+        pk8->ribbon(Ribbon::MarkBlizzard, ribbon(Ribbon::MarkBlizzard));
+        pk8->ribbon(Ribbon::MarkDry, ribbon(Ribbon::MarkDry));
+        pk8->ribbon(Ribbon::MarkSandstorm, ribbon(Ribbon::MarkSandstorm));
+        pk8->ribbon(Ribbon::MarkMisty, ribbon(Ribbon::MarkMisty));
+        pk8->ribbon(Ribbon::MarkDestiny, ribbon(Ribbon::MarkDestiny));
+        pk8->ribbon(Ribbon::MarkFishing, ribbon(Ribbon::MarkFishing));
+        pk8->ribbon(Ribbon::MarkCurry, ribbon(Ribbon::MarkCurry));
+        pk8->ribbon(Ribbon::MarkUncommon, ribbon(Ribbon::MarkUncommon));
+        pk8->ribbon(Ribbon::MarkRare, ribbon(Ribbon::MarkRare));
+        pk8->ribbon(Ribbon::MarkRowdy, ribbon(Ribbon::MarkRowdy));
+        pk8->ribbon(Ribbon::MarkAbsentMinded, ribbon(Ribbon::MarkAbsentMinded));
+        pk8->ribbon(Ribbon::MarkJittery, ribbon(Ribbon::MarkJittery));
+        pk8->ribbon(Ribbon::MarkExcited, ribbon(Ribbon::MarkExcited));
+        pk8->ribbon(Ribbon::MarkCharismatic, ribbon(Ribbon::MarkCharismatic));
+        pk8->ribbon(Ribbon::MarkCalmness, ribbon(Ribbon::MarkCalmness));
+        pk8->ribbon(Ribbon::MarkIntense, ribbon(Ribbon::MarkIntense));
+        pk8->ribbon(Ribbon::MarkZonedOut, ribbon(Ribbon::MarkZonedOut));
+        pk8->ribbon(Ribbon::MarkJoyful, ribbon(Ribbon::MarkJoyful));
+        pk8->ribbon(Ribbon::MarkAngry, ribbon(Ribbon::MarkAngry));
+        pk8->ribbon(Ribbon::MarkSmiley, ribbon(Ribbon::MarkSmiley));
+        pk8->ribbon(Ribbon::MarkTeary, ribbon(Ribbon::MarkTeary));
+        pk8->ribbon(Ribbon::MarkUpbeat, ribbon(Ribbon::MarkUpbeat));
+        pk8->ribbon(Ribbon::MarkPeeved, ribbon(Ribbon::MarkPeeved));
+        pk8->ribbon(Ribbon::MarkIntellectual, ribbon(Ribbon::MarkIntellectual));
+        pk8->ribbon(Ribbon::MarkFerocious, ribbon(Ribbon::MarkFerocious));
+        pk8->ribbon(Ribbon::MarkCrafty, ribbon(Ribbon::MarkCrafty));
+        pk8->ribbon(Ribbon::MarkScowling, ribbon(Ribbon::MarkScowling));
+        pk8->ribbon(Ribbon::MarkKindly, ribbon(Ribbon::MarkKindly));
+        pk8->ribbon(Ribbon::MarkFlustered, ribbon(Ribbon::MarkFlustered));
+        pk8->ribbon(Ribbon::MarkPumpedUp, ribbon(Ribbon::MarkPumpedUp));
+        pk8->ribbon(Ribbon::MarkZeroEnergy, ribbon(Ribbon::MarkZeroEnergy));
+        pk8->ribbon(Ribbon::MarkPrideful, ribbon(Ribbon::MarkPrideful));
+        pk8->ribbon(Ribbon::MarkUnsure, ribbon(Ribbon::MarkUnsure));
+        pk8->ribbon(Ribbon::MarkHumble, ribbon(Ribbon::MarkHumble));
+        pk8->ribbon(Ribbon::MarkThorny, ribbon(Ribbon::MarkThorny));
+        pk8->ribbon(Ribbon::MarkVigor, ribbon(Ribbon::MarkVigor));
+        pk8->ribbon(Ribbon::MarkSlump, ribbon(Ribbon::MarkSlump));
+
+        pk8->refreshChecksum();
+
+        return pk8;
     }
 
     Generation PK9::generation(void) const

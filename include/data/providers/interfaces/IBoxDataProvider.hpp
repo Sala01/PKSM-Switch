@@ -65,4 +65,14 @@ public:
         (void)saveData;
         return ClearSlot(boxIndex, slotIndex);
     }
+
+    // Convert a PKX to the format expected by this provider's target save.
+    // Returns nullptr if conversion is not possible (incompatible format).
+    // Default: clone (bank accepts anything).
+    virtual std::unique_ptr<pksm::PKX> PrepareForWrite(
+        const pksm::saves::SaveData::Ref& saveData,
+        const pksm::PKX& pkx) {
+        (void)saveData;
+        return pkx.clone();
+    }
 };

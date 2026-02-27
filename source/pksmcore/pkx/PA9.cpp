@@ -25,6 +25,9 @@
  */
 
 #include "pkx/PA9.hpp"
+#include "pkx/PK8.hpp"
+#include "pkx/PK9.hpp"
+#include "sav/Sav.hpp"
 #include "utils/crypto.hpp"
 #include "utils/endian.hpp"
 #include "utils/flagUtil.hpp"
@@ -336,6 +339,31 @@ namespace pksm
     std::unique_ptr<PKX> PA9::clone(void) const
     {
         return PKX::getPKM<PA9>(data, isParty() ? PARTY_LENGTH : BOX_LENGTH);
+    }
+
+    std::unique_ptr<PKX> PA9::convertToG9(Sav& save) const
+    {
+        if (save.version() != GameVersion::ZA)
+        {
+            // SV target — PA9 and PK9 share identical binary layout, raw-data copy
+            auto pk9 = PKX::getPKM<PK9>(data, BOX_LENGTH);
+            // Set TeraType from PersonalSV (same pattern as PA8::convertToG9)
+            auto type1 = PersonalSV::type1(pk9->formSpecies());
+            u8 tera    = (type1 != Type::Normal) ? u8(type1)
+                                                 : u8(PersonalSV::type2(pk9->formSpecies()));
+            pk9->teraTypeOriginal(tera);
+            pk9->teraTypeOverride(tera);
+            pk9->refreshChecksum();
+            return pk9;
+        }
+        return clone();
+    }
+
+    std::unique_ptr<PK8> PA9::convertToG8(Sav& save) const
+    {
+        // PA9 and PK9 share identical binary layout — reinterpret as PK9 and delegate
+        auto asPK9 = PKX::getPKM<PK9>(data, BOX_LENGTH);
+        return asPK9->convertToG8(save);
     }
 
     Generation PA9::generation(void) const

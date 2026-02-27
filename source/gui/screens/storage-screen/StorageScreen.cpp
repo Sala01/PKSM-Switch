@@ -432,9 +432,17 @@ void StorageScreen::PlaceDown() {
     if (destSlotVisual.isEmpty()) {
         // ── Place into empty slot: commit all deferred writes + final placement ──
         auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
+
+        // Convert held Pokemon to destination format before writing
+        auto prepared = destProvider->PrepareForWrite(saveData, *heldPokemon->pkx);
+        if (!prepared) {
+            LOG_DEBUG("Cannot place: incompatible format for destination save");
+            return; // User stays holding, placement blocked
+        }
+
         bool allOk = true;
 
-        // Flush all deferred writes to disk
+        // Flush all deferred writes to disk (already converted at carry-swap time)
         for (const auto& dw : deferredWrites) {
             if (!dw.provider->WritePokemon(saveData, dw.boxIndex, dw.slotIndex, *dw.pkx)) {
                 LOG_ERROR("Failed to commit deferred write at Box " +
@@ -443,8 +451,8 @@ void StorageScreen::PlaceDown() {
             }
         }
 
-        // Write held Pokemon to the final destination
-        if (!destProvider->WritePokemon(saveData, destBoxIndex, destSlotIndex, *heldPokemon->pkx)) {
+        // Write converted Pokemon to the final destination
+        if (!destProvider->WritePokemon(saveData, destBoxIndex, destSlotIndex, *prepared)) {
             LOG_ERROR("Failed to write held Pokemon to final destination");
             allOk = false;
         }
@@ -470,7 +478,7 @@ void StorageScreen::PlaceDown() {
         }
 
         // Update destination visual
-        destBox->SetPokemonData(destBoxIndex, destSlotIndex, PkxToVisual(*heldPokemon->pkx));
+        destBox->SetPokemonData(destBoxIndex, destSlotIndex, PkxToVisual(*prepared));
 
         if (!allOk) {
             LOG_ERROR("Some writes failed during commit — reload box data for accurate state");
@@ -501,14 +509,27 @@ void StorageScreen::PlaceDown() {
 
         if (existing) {
             // Slot already has a deferred write — swap PKX pointers
+            auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
+            auto prepared = destProvider->PrepareForWrite(saveData, *heldPokemon->pkx);
+            if (!prepared) {
+                LOG_DEBUG("Cannot swap: incompatible format for destination");
+                return;
+            }
             auto displaced = std::move(existing->pkx);
-            existing->pkx = std::move(heldPokemon->pkx);
+            existing->pkx = std::move(prepared);
             heldPokemon->pkx = std::move(displaced);
             // previousVisual stays unchanged (original disk state)
             destBox->SetPokemonData(destBoxIndex, destSlotIndex, PkxToVisual(*existing->pkx));
         } else {
             // New slot — read the current occupant from disk
             auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
+
+            auto prepared = destProvider->PrepareForWrite(saveData, *heldPokemon->pkx);
+            if (!prepared) {
+                LOG_DEBUG("Cannot swap: incompatible format for destination");
+                return;
+            }
+
             auto displaced = destProvider->GetPokemon(saveData, destBoxIndex, destSlotIndex);
             if (!displaced) {
                 LOG_ERROR("Failed to read destination Pokemon for carry-swap");
@@ -517,7 +538,7 @@ void StorageScreen::PlaceDown() {
 
             DeferredWrite dw{
                 destProvider, destBoxIndex, destSlotIndex, destIsBank,
-                std::move(heldPokemon->pkx), destSlotVisual
+                std::move(prepared), destSlotVisual
             };
             destBox->SetPokemonData(destBoxIndex, destSlotIndex, PkxToVisual(*dw.pkx));
             deferredWrites.push_back(std::move(dw));
