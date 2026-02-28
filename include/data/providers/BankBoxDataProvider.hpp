@@ -22,6 +22,8 @@ private:
     std::string rootPath;
 
     mutable bool loaded;
+    mutable bool bankDirty;
+    mutable bool namesDirty;
     mutable int boxCount;
     mutable std::vector<BankEntry> entries;
     mutable std::vector<std::string> boxNames;
@@ -55,9 +57,13 @@ public:
         int slotIndex) const override;
 
     // Write a full Pokemon to a bank slot (encrypts and persists to disk)
-    bool WritePokemon(int boxIndex, int slotIndex, const pksm::PKX& pkx) override;
+    bool WritePokemon(int boxIndex, int slotIndex, const pksm::PKX &pkx) override;
     // Clear a bank slot, marking it as empty
     bool ClearSlot(int boxIndex, int slotIndex) override;
     // Update a box name and persist to disk
-    bool SetBoxName(int boxIndex, const std::string& name);
+    bool SetBoxName(int boxIndex, const std::string &name);
+
+    bool HasPendingWrites() const override;
+    bool FlushPendingWrites() const override;
+    void DiscardPendingWrites() const override;
 };

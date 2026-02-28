@@ -11,16 +11,21 @@ MainMenu::MainMenu(
     std::function<void(pu::ui::Overlay::Ref)> onShowOverlay,
     std::function<void()> onHideOverlay,
     ISaveDataAccessor::Ref saveDataAccessor,
+    IBoxDataProvider::Ref boxDataProvider,
+    IBoxDataProvider::Ref bankBoxDataProvider,
     std::map<pksm::ui::MenuButtonType, std::function<void()>> navigationCallbacks
 )
   : BaseLayout(onShowOverlay, onHideOverlay),
     onBack(onBack),
     saveDataAccessor(saveDataAccessor),
+    boxDataProvider(boxDataProvider),
+    bankBoxDataProvider(bankBoxDataProvider),
     navigationCallbacks(navigationCallbacks),
     buttonHandler(),
     isExitConfirmVisible(false),
     exitConfirmSelectedIndex(0),
-    exitConfirmOverlay(nullptr) {
+    exitConfirmOverlay(nullptr),
+    exitConfirmPending(false) {
     LOG_DEBUG("Initializing MainMenu...");
 
     this->SetBackgroundColor(bgColor);
@@ -100,7 +105,10 @@ MainMenu::MainMenu(
         HidNpadButton_B,
         nullptr,  // No visual feedback needed
         [this]() {
-            if (this->saveDataAccessor && this->saveDataAccessor->hasUnsavedChanges()) {
+            const bool saveDirty = (this->saveDataAccessor && this->saveDataAccessor->hasUnsavedChanges());
+            const bool boxDirty = (this->boxDataProvider && this->boxDataProvider->HasPendingWrites());
+            const bool bankDirty = (this->bankBoxDataProvider && this->bankBoxDataProvider->HasPendingWrites());
+            if (saveDirty || boxDirty || bankDirty) {
                 if (!this->isExitConfirmVisible) {
                     this->exitConfirmSelectedIndex = 0;
                     this->exitConfirmOverlay = pksm::ui::ConfirmExitOverlay::New(0, 0, this->GetWidth(), this->GetHeight());
@@ -122,31 +130,52 @@ MainMenu::MainMenu(
         HidNpadButton_Y,
         nullptr,
         [this]() {
-            if (!this->saveDataAccessor) {
-                pksm::utils::NotificationManager::Push("Save Failed", "No save accessor available.");
-                return;
-            }
+            const bool bankDirty = (this->bankBoxDataProvider && this->bankBoxDataProvider->HasPendingWrites());
+            const bool boxDirty = (this->boxDataProvider && this->boxDataProvider->HasPendingWrites());
+            const bool saveDirty = (this->saveDataAccessor && this->saveDataAccessor->hasUnsavedChanges());
 
-            if (!this->saveDataAccessor->getCurrentSaveData()) {
-                pksm::utils::NotificationManager::Push("Save Failed", "No save loaded.");
-                return;
-            }
-
-            if (!this->saveDataAccessor->hasUnsavedChanges()) {
+            if (!saveDirty && !boxDirty && !bankDirty) {
                 pksm::utils::NotificationManager::Push("Save", "No changes to save.");
                 return;
             }
 
-            if (this->saveDataAccessor->saveChanges()) {
-                pksm::utils::NotificationManager::Push("Save", "Changes saved successfully.");
-            } else {
-                const auto err = this->saveDataAccessor->getLastError();
-                if (!err.empty()) {
-                    pksm::utils::NotificationManager::Push("Save Failed", err);
-                } else {
-                    pksm::utils::NotificationManager::Push("Save Failed", "Failed to save changes.");
+            if (saveDirty) {
+                if (!this->saveDataAccessor) {
+                    pksm::utils::NotificationManager::Push("Save Failed", "No save accessor available.");
+                    return;
+                }
+
+                if (!this->saveDataAccessor->getCurrentSaveData()) {
+                    pksm::utils::NotificationManager::Push("Save Failed", "No save loaded.");
+                    return;
+                }
+
+                if (!this->saveDataAccessor->saveChanges()) {
+                    const auto err = this->saveDataAccessor->getLastError();
+                    if (!err.empty()) {
+                        pksm::utils::NotificationManager::Push("Save Failed", err);
+                    } else {
+                        pksm::utils::NotificationManager::Push("Save Failed", "Failed to save changes.");
+                    }
+                    return;
                 }
             }
+
+            if (boxDirty) {
+                if (!this->boxDataProvider->FlushPendingWrites()) {
+                    pksm::utils::NotificationManager::Push("Save Failed", "Failed to save box changes.");
+                    return;
+                }
+            }
+
+            if (bankDirty) {
+                if (!this->bankBoxDataProvider->FlushPendingWrites()) {
+                    pksm::utils::NotificationManager::Push("Save Failed", "Failed to save bank changes.");
+                    return;
+                }
+            }
+
+            pksm::utils::NotificationManager::Push("Save", "Changes saved successfully.");
         }
     );
 
@@ -198,6 +227,49 @@ MainMenu::~MainMenu() = default;
 
 void MainMenu::OnInput(u64 down, u64 up, u64 held) {
     if (isExitConfirmVisible) {
+        if (exitConfirmPending) {
+            exitConfirmPending = false;
+
+            if (this->saveDataAccessor && this->saveDataAccessor->hasUnsavedChanges()) {
+                if (!this->saveDataAccessor->getCurrentSaveData()) {
+                    pksm::utils::NotificationManager::Push("Save Failed", "No save loaded.");
+                    return;
+                }
+
+                if (!this->saveDataAccessor->saveChanges()) {
+                    const auto err = this->saveDataAccessor->getLastError();
+                    if (!err.empty()) {
+                        pksm::utils::NotificationManager::Push("Save Failed", err);
+                    } else {
+                        pksm::utils::NotificationManager::Push("Save Failed", "Failed to save changes.");
+                    }
+                    return;
+                }
+            }
+
+            if (this->boxDataProvider && this->boxDataProvider->HasPendingWrites()) {
+                if (!this->boxDataProvider->FlushPendingWrites()) {
+                    pksm::utils::NotificationManager::Push("Save Failed", "Failed to save box changes.");
+                    return;
+                }
+            }
+
+            if (this->bankBoxDataProvider && this->bankBoxDataProvider->HasPendingWrites()) {
+                if (!this->bankBoxDataProvider->FlushPendingWrites()) {
+                    pksm::utils::NotificationManager::Push("Save Failed", "Failed to save bank changes.");
+                    return;
+                }
+            }
+
+            this->onHideOverlay();
+            this->isExitConfirmVisible = false;
+            this->exitConfirmOverlay = nullptr;
+            if (this->onBack) {
+                this->onBack();
+            }
+            return;
+        }
+
         if (down & HidNpadButton_B) {
             this->onHideOverlay();
             this->isExitConfirmVisible = false;
@@ -227,24 +299,20 @@ void MainMenu::OnInput(u64 down, u64 up, u64 held) {
 
         if (down & HidNpadButton_A) {
             if (exitConfirmSelectedIndex == 0) {
-                if (!this->saveDataAccessor) {
-                    pksm::utils::NotificationManager::Push("Save Failed", "No save accessor available.");
-                    return;
+                if (exitConfirmOverlay) {
+                    exitConfirmOverlay->SetTitleText("Saving... Do Not Close App or Power off.");
                 }
 
-                if (!this->saveDataAccessor->getCurrentSaveData()) {
-                    pksm::utils::NotificationManager::Push("Save Failed", "No save loaded.");
-                    return;
-                }
+                exitConfirmPending = true;
+                return;
+            }
 
-                if (this->saveDataAccessor->hasUnsavedChanges() && !this->saveDataAccessor->saveChanges()) {
-                    const auto err = this->saveDataAccessor->getLastError();
-                    if (!err.empty()) {
-                        pksm::utils::NotificationManager::Push("Save Failed", err);
-                    } else {
-                        pksm::utils::NotificationManager::Push("Save Failed", "Failed to save changes.");
-                    }
-                    return;
+            if (exitConfirmSelectedIndex == 1) {
+                if (this->boxDataProvider && this->boxDataProvider->HasPendingWrites()) {
+                    this->boxDataProvider->DiscardPendingWrites();
+                }
+                if (this->bankBoxDataProvider && this->bankBoxDataProvider->HasPendingWrites()) {
+                    this->bankBoxDataProvider->DiscardPendingWrites();
                 }
             }
 

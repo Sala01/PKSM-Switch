@@ -18,6 +18,8 @@ class BoxDataProvider : public IBoxDataProvider
 private:
     mutable const pksm::saves::SaveData *cachedSaveDataPtr = nullptr;
     mutable std::unique_ptr<pksm::Sav> cachedSav;
+    mutable std::string cachedSaveName;
+    mutable bool saveDirty = false;
 
     pksm::Sav *GetSavForSaveData(const pksm::saves::SaveData::Ref &saveData) const;
 
@@ -65,4 +67,8 @@ public:
     std::unique_ptr<pksm::PKX> PrepareForWrite(
         const pksm::saves::SaveData::Ref &saveData,
         const pksm::PKX &pkx) override;
+
+    bool HasPendingWrites() const override;
+    bool FlushPendingWrites() const override;
+    void DiscardPendingWrites() const override;
 };

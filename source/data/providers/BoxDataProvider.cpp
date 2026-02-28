@@ -143,6 +143,8 @@ pksm::Sav* BoxDataProvider::GetSavForSaveData(const pksm::saves::SaveData::Ref& 
     if (!saveData) {
         cachedSav.reset();
         cachedSaveDataPtr = nullptr;
+        cachedSaveName.clear();
+        saveDirty = false;
         return nullptr;
     }
 
@@ -154,11 +156,15 @@ pksm::Sav* BoxDataProvider::GetSavForSaveData(const pksm::saves::SaveData::Ref& 
     try {
         cachedSav = LoadSavFromPath(saveData->getName());
         cachedSaveDataPtr = save_ptr;
+        cachedSaveName = saveData->getName();
+        saveDirty = false;
         return cachedSav.get();
     } catch (const std::exception &e) {
         pksm::utils::Logger::Error(std::string("[BoxDataProvider] Failed to cache save: ") + e.what());
         cachedSav.reset();
         cachedSaveDataPtr = nullptr;
+        cachedSaveName.clear();
+        saveDirty = false;
         return nullptr;
     }
 }
@@ -199,7 +205,8 @@ bool BoxDataProvider::SetBoxData(
     if (boxIndex < 0 || boxIndex >= sav->maxBoxes()) return false;
 
     sav->boxName(static_cast<u8>(boxIndex), boxData.name);
-    return PersistSave(sav, saveData->getName());
+    saveDirty = true;
+    return true;
 }
 
 bool BoxDataProvider::SetPokemonData(
@@ -349,7 +356,8 @@ bool BoxDataProvider::WritePokemon(
 
         // sav->pkm() setter expects a decrypted PKX — the save handles internal encryption
         sav->pkm(pkx, static_cast<u8>(boxIndex), static_cast<u8>(slotIndex), false);
-        return PersistSave(sav, saveData->getName());
+        saveDirty = true;
+        return true;
     } catch (const std::exception &e) {
         pksm::utils::Logger::Error(std::string("[BoxDataProvider] WritePokemon failed: ") + e.what());
         return false;
@@ -376,11 +384,44 @@ bool BoxDataProvider::ClearSlot(
             sav->pkm(*pk, static_cast<u8>(boxIndex), static_cast<u8>(slotIndex), false);
         }
 
-        return PersistSave(sav, saveData->getName());
+        saveDirty = true;
+        return true;
     } catch (const std::exception &e) {
         pksm::utils::Logger::Error(std::string("[BoxDataProvider] ClearSlot failed: ") + e.what());
         return false;
     }
+}
+
+bool BoxDataProvider::HasPendingWrites() const {
+    return saveDirty;
+}
+
+bool BoxDataProvider::FlushPendingWrites() const {
+    if (!saveDirty) {
+        return true;
+    }
+
+    if (!cachedSav || cachedSaveName.empty()) {
+        return false;
+    }
+
+    if (!PersistSave(cachedSav.get(), cachedSaveName)) {
+        return false;
+    }
+
+    saveDirty = false;
+    return true;
+}
+
+void BoxDataProvider::DiscardPendingWrites() const {
+    if (!saveDirty) {
+        return;
+    }
+
+    cachedSav.reset();
+    cachedSaveDataPtr = nullptr;
+    cachedSaveName.clear();
+    saveDirty = false;
 }
 
 bool BoxDataProvider::PersistSave(pksm::Sav* sav, const std::string& saveName) const {
