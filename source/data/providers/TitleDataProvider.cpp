@@ -14,6 +14,56 @@ namespace pksm::titles {
 
 static constexpr const char* JSON_PATH = "romfs:/gfx/data/data.json";
 
+unsigned long long TitleDataProvider::GetInsertedGameCardID() const {
+    Result rc = ncmInitialize();
+    if (R_FAILED(rc)) {
+        return 0;
+    }
+
+    NcmContentMetaDatabase ncm_db{};
+    unsigned long long inserted_id = 0;
+    bool opened_db = false;
+
+    rc = ncmOpenContentMetaDatabase(&ncm_db, NcmStorageId_GameCard);
+    if (R_SUCCEEDED(rc)) {
+        opened_db = true;
+        u32 total = 0;
+        u32 written = 0;
+        NcmContentMetaKey key{};
+
+        // first call: request at least one entry; meta_type=0 means all.
+        rc = ncmContentMetaDatabaseList(&ncm_db, (s32*)&total, (s32*)&written, &key, 1, (NcmContentMetaType)0, 0, 0, UINT64_MAX, NcmContentInstallType_Full);
+        if (R_SUCCEEDED(rc) && written > 0) {
+            // if the first entry isn't an application, enumerate all keys and pick the first application.
+            if (key.type == NcmContentMetaType_Application) {
+                inserted_id = key.id;
+            } else if (total > 0) {
+                auto keys = static_cast<NcmContentMetaKey*>(std::calloc(total, sizeof(NcmContentMetaKey)));
+                if (keys) {
+                    u32 written2 = 0;
+                    rc = ncmContentMetaDatabaseList(&ncm_db, (s32*)&total, (s32*)&written2, keys, (s32)total, (NcmContentMetaType)0, 0, 0, UINT64_MAX, NcmContentInstallType_Full);
+                    if (R_SUCCEEDED(rc) && written2 > 0) {
+                        for (u32 i = 0; i < written2; i++) {
+                            if (keys[i].type == NcmContentMetaType_Application && keys[i].id != 0) {
+                                inserted_id = keys[i].id;
+                                break;
+                            }
+                        }
+                    }
+                    std::free(keys);
+                }
+            }
+        }
+    }
+
+    if (opened_db) {
+        ncmContentMetaDatabaseClose(&ncm_db);
+    }
+
+    ncmExit();
+    return inserted_id;
+}
+
 void TitleDataProvider::GetInstalledApplicationIds(std::set<u64>& out_ids) const {
     Result rc = nsInitialize();
     if (R_FAILED(rc)) return;
@@ -72,13 +122,7 @@ TitleDataProvider::TitleDataProvider()
     }
 
     try {
-        mockCartridgeTitle = std::make_shared<Title>(
-            "Pokémon Legends: Arceus",
-            "romfs:/gfx/mock/console/arceus_menu_icon.jpg",
-            0x00175E00
-        );
-
-        // Mock emulator titles
+        // mock emulator titles replace later with REAL emu titles
         mockEmulatorTitles.clear();
         mockEmulatorTitles.push_back(std::make_shared<Title>("Pokémon Sun", "romfs:/gfx/mock/emulator/sun_menu_icon.jpg", 0x00180014));
         mockEmulatorTitles.push_back(std::make_shared<Title>("Pokémon Ultra Moon", "romfs:/gfx/mock/emulator/ultra_moon_menu_icon.jpg", 0x00180015));
@@ -89,7 +133,20 @@ TitleDataProvider::TitleDataProvider()
 }
 
 Title::Ref TitleDataProvider::GetGameCardTitle() const {
-    return mockCartridgeTitle;
+    const auto insertedId = static_cast<u64>(GetInsertedGameCardID());
+    if (insertedId == 0) {
+        return nullptr;
+    }
+
+    for (const auto& t : installedTitles) {
+        if (!t) continue;
+
+        if (t->getTitleId() == insertedId) {
+            return t;
+        }
+    }
+
+    return nullptr;
 }
 
 std::vector<Title::Ref> TitleDataProvider::GetInstalledTitles(const AccountUid& /*userId*/) const {
@@ -100,8 +157,13 @@ std::vector<Title::Ref> TitleDataProvider::GetInstalledTitles(const AccountUid& 
     std::vector<std::shared_ptr<Title>> filteredList;
     filteredList.reserve(installedTitles.size());
 
+    const auto insertedId = static_cast<u64>(GetInsertedGameCardID());
     for (const auto& t : installedTitles) {
         if (!t) continue;
+
+        if (insertedId != 0 && t->getTitleId() == insertedId) {
+            continue;
+        }
 
         if (installedIds.find(t->getTitleId()) != installedIds.end()) {
             filteredList.push_back(t);

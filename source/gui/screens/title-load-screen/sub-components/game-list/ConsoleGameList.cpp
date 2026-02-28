@@ -138,7 +138,7 @@ pksm::ui::ConsoleGameList::ConsoleGameList(
         }
     });
     directionalInputHandler.SetOnMoveRight([this]() {
-        if (selectionState == SelectionState::GameCard && !titles.empty()) {
+        if (selectionState == SelectionState::GameCard && titles.size() > 1) {
             LOG_DEBUG("[ConsoleGameList] Transitioning selection from game card to installed games");
             selectionState = SelectionState::InstalledGame;
             installedGames->SetSelectedIndex(0);  // Always select first game when moving right
@@ -267,7 +267,7 @@ void pksm::ui::ConsoleGameList::SetDataSource(const std::vector<titles::Title::R
     this->titles = titles;
 
     // Update game card image if available
-    if (!titles.empty()) {
+    if (!titles.empty() && titles[0]) {
         LOG_DEBUG("[ConsoleGameList] Setting game card image for first title");
         gameCardImage->ISelectable::SetName(gameCardImage->ISelectable::GetName() + " " + titles[0]->getName());
         gameCardImage->SetImage(titles[0]->getIcon());
