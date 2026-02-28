@@ -14,6 +14,8 @@ StartupScreen::StartupScreen(
     // Set background color
     this->SetBackgroundColor(pu::ui::Color(20, 20, 30, 255));
 
+    const u32 LOADING_BAR_X = (this->GetWidth() - LOADING_BAR_WIDTH) / 2;
+
     // Create PKSM logo (using FocusableImage like other screens)
     logoImage = pksm::ui::FocusableImage::New((1280 - LOGO_SIZE) / 2, LOGO_Y, nullptr, LOGO_SIZE, 0);
     try {
