@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include <pu/ui/ui_Overlay.hpp>
 
 #include <pu/ui/elm/elm_Rectangle.hpp>
@@ -15,6 +17,7 @@ namespace pksm::ui
         PU_SMART_CTOR(ConfirmExitOverlay)
 
         void SetSelectedIndex(const int idx);
+        void SetTitleText(const std::string &text);
 
     private:
         void Rebuild();

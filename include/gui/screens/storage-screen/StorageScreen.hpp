@@ -1,6 +1,8 @@
 #pragma once
 
 #include <functional>
+#include <memory>
+#include <optional>
 #include <pu/Plutonium>
 
 #include "data/providers/interfaces/IBoxDataProvider.hpp"
@@ -57,6 +59,32 @@ namespace pksm::layout
 
         bool isSummaryOverlayVisible = false;
 
+        // Held Pokemon state for pick-up/place-down operations.
+        // Uses deferred writes: no disk I/O until the user places on an empty slot.
+        // Cancel restores all visuals with zero data loss.
+        struct HeldPokemon {
+            std::unique_ptr<pksm::PKX> pkx;         // Currently held PKX (changes on each carry-swap)
+            IBoxDataProvider::Ref originalProvider;   // Provider of the original pick-up source
+            int originalBox;                          // Original source box index
+            int originalSlot;                         // Original source slot index
+            bool originalFromBank;                    // Whether original source was bank side
+            pksm::ui::BoxPokemonData originalVisual;  // Visual data at original source (for cancel)
+        };
+
+        // Pending writes accumulated during a carry-swap chain.
+        // Each records what PKX to write at a slot and the previous visual for undo.
+        struct DeferredWrite {
+            IBoxDataProvider::Ref provider;
+            int boxIndex;
+            int slotIndex;
+            bool isBank;
+            std::unique_ptr<pksm::PKX> pkx;           // PKX to write at this slot on commit
+            pksm::ui::BoxPokemonData previousVisual;   // Visual before this write (for cancel)
+        };
+
+        std::optional<HeldPokemon> heldPokemon;
+        std::vector<DeferredWrite> deferredWrites;
+
         // Layout constants
         static constexpr pu::i32 HEADER_TOP_MARGIN = 35;
         static constexpr pu::i32 SIDE_MARGIN = 70;
@@ -81,6 +109,12 @@ namespace pksm::layout
         void InitializePokemonBoxes();
         void InitializeFocusManagement();
         void SetActiveBox(ActiveBox box);
+
+        // Pick-up/place-down operations
+        void PickUp();
+        void PlaceDown();
+        void CancelPickUp();
+        void UpdateHelpFooter();
 
         // Override BaseLayout methods
         std::vector<pksm::ui::HelpItem> GetHelpOverlayItems() const override;

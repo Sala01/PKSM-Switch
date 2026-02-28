@@ -12,6 +12,12 @@ ConfirmExitOverlay::ConfirmExitOverlay(const pu::i32 x, const pu::i32 y, const p
     this->Rebuild();
 }
 
+void ConfirmExitOverlay::SetTitleText(const std::string &text) {
+    if (titleText) {
+        titleText->SetText(text);
+    }
+}
+
 void ConfirmExitOverlay::SetSelectedIndex(const int idx) {
     if (idx < 0) {
         selectedIndex = 0;

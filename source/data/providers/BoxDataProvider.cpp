@@ -10,6 +10,8 @@
 
 #include <switch.h>
 
+#include "pksmcore/pkx/PA8.hpp"
+#include "pksmcore/pkx/PK8.hpp"
 #include "pksmcore/pkx/PKX.hpp"
 #include "pksmcore/sav/Sav.hpp"
 #include "utils/Logger.hpp"
@@ -53,6 +55,84 @@ std::unique_ptr<pksm::Sav> LoadSavFromPath(const std::string &save_name) {
     return sav;
 }
 
+// Convert PK8 → PA8 field-by-field for PLA saves.
+// convertToG8() returns std::unique_ptr<PK8> and cannot return PA8 (different layout/size),
+// so this helper is used at the provider level when the target save is PLA.
+std::unique_ptr<pksm::PKX> ConvertPK8toPA8(const pksm::PK8& pk8) {
+    auto pa8 = pksm::PKX::getPKM<pksm::PA8>(nullptr, pksm::PA8::BOX_LENGTH);
+
+    pa8->encryptionConstant(pk8.encryptionConstant());
+    pa8->species(pk8.species());
+    pa8->TID(pk8.TID());
+    pa8->SID(pk8.SID());
+    pa8->experience(pk8.experience());
+    pa8->PID(pk8.PID());
+
+    if (pk8.ability() == pksm::PersonalSWSH::ability(pk8.formSpecies(), pk8.abilityNumber() >> 1))
+    {
+        pa8->setAbility(pk8.abilityNumber() >> 1);
+    }
+    else
+    {
+        pa8->ability(pk8.ability());
+        pa8->abilityNumber(pk8.abilityNumber());
+    }
+
+    pa8->language(pk8.language());
+    pa8->heldItem(pk8.heldItem());
+    pa8->markValue(pk8.markValue());
+
+    for (pksm::Stat stat : {pksm::Stat::HP, pksm::Stat::ATK, pksm::Stat::DEF,
+                            pksm::Stat::SPATK, pksm::Stat::SPDEF, pksm::Stat::SPD})
+    {
+        pa8->ev(stat, pk8.ev(stat));
+        pa8->iv(stat, pk8.iv(stat));
+        pa8->hyperTrain(stat, pk8.hyperTrain(stat));
+    }
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        pa8->move(i, pk8.move(i));
+        pa8->PPUp(i, pk8.PPUp(i));
+        pa8->PP(i, pk8.PP(i));
+        pa8->relearnMove(i, pk8.relearnMove(i));
+    }
+
+    pa8->egg(pk8.egg());
+    pa8->nicknamed(pk8.nicknamed());
+    pa8->nickname(pk8.nickname());
+    pa8->fatefulEncounter(pk8.fatefulEncounter());
+    pa8->gender(pk8.gender());
+    pa8->otGender(pk8.otGender());
+    pa8->alternativeForm(pk8.alternativeForm());
+    pa8->nature(pk8.nature());
+
+    pa8->version(pk8.version());
+    pa8->otName(pk8.otName());
+    pa8->otFriendship(pk8.otFriendship());
+    pa8->metDate(pk8.metDate());
+    pa8->eggDate(pk8.eggDate());
+    pa8->metLocation(pk8.metLocation());
+    pa8->eggLocation(pk8.eggLocation());
+    pa8->ball(pk8.ball());
+    pa8->metLevel(pk8.metLevel());
+    pa8->currentHandler(pk8.currentHandler());
+    pa8->htFriendship(pk8.htFriendship());
+
+    pa8->pkrsStrain(pk8.pkrsStrain());
+    pa8->pkrsDays(pk8.pkrsDays());
+
+    for (size_t i = 0; i < 6; i++)
+    {
+        pa8->contest(i, pk8.contest(i));
+    }
+
+    // PA8 doesn't use ribbons (PLA has no ribbon system)
+
+    pa8->refreshChecksum();
+    return pa8;
+}
+
 } // namespace
 
 BoxDataProvider::BoxDataProvider() = default;
@@ -63,6 +143,8 @@ pksm::Sav* BoxDataProvider::GetSavForSaveData(const pksm::saves::SaveData::Ref& 
     if (!saveData) {
         cachedSav.reset();
         cachedSaveDataPtr = nullptr;
+        cachedSaveName.clear();
+        saveDirty = false;
         return nullptr;
     }
 
@@ -74,11 +156,15 @@ pksm::Sav* BoxDataProvider::GetSavForSaveData(const pksm::saves::SaveData::Ref& 
     try {
         cachedSav = LoadSavFromPath(saveData->getName());
         cachedSaveDataPtr = save_ptr;
+        cachedSaveName = saveData->getName();
+        saveDirty = false;
         return cachedSav.get();
     } catch (const std::exception &e) {
         pksm::utils::Logger::Error(std::string("[BoxDataProvider] Failed to cache save: ") + e.what());
         cachedSav.reset();
         cachedSaveDataPtr = nullptr;
+        cachedSaveName.clear();
+        saveDirty = false;
         return nullptr;
     }
 }
@@ -110,11 +196,17 @@ bool BoxDataProvider::SetBoxData(
     int boxIndex,
     const pksm::ui::BoxData& boxData
 ) {
-    (void)saveData;
-    (void)boxIndex;
-    (void)boxData;
-    pksm::utils::Logger::Error("[BoxDataProvider] SetBoxData not implemented yet");
-    return false;
+    // BoxData only carries species/form/shiny per slot — not enough for full persistence.
+    // We can update the box name if the save supports it.
+    if (!saveData) return false;
+
+    auto *sav = GetSavForSaveData(saveData);
+    if (!sav) return false;
+    if (boxIndex < 0 || boxIndex >= sav->maxBoxes()) return false;
+
+    sav->boxName(static_cast<u8>(boxIndex), boxData.name);
+    saveDirty = true;
+    return true;
 }
 
 bool BoxDataProvider::SetPokemonData(
@@ -123,11 +215,12 @@ bool BoxDataProvider::SetPokemonData(
     int slotIndex,
     const pksm::ui::BoxPokemonData& pokemonData
 ) {
-    (void)saveData;
-    (void)boxIndex;
-    (void)slotIndex;
-    (void)pokemonData;
-    pksm::utils::Logger::Error("[BoxDataProvider] SetPokemonData not implemented yet");
+    // BoxPokemonData only has species/form/shiny — not enough to write a full Pokemon.
+    // We can handle the "clear slot" case (species == 0).
+    if (pokemonData.isEmpty()) {
+        return ClearSlot(saveData, boxIndex, slotIndex);
+    }
+    pksm::utils::Logger::Error("[BoxDataProvider] SetPokemonData: use WritePokemon() for full PKX writes");
     return false;
 }
 
@@ -249,13 +342,146 @@ pksm::ui::BoxData BoxDataProvider::LoadBoxDataFromSave(
     }
 }
 
-bool BoxDataProvider::SaveBoxDataToFile(
+bool BoxDataProvider::WritePokemon(
     const pksm::saves::SaveData::Ref& saveData,
-    int boxIndex,
-    const pksm::ui::BoxData& boxData
-) const {
-    (void)saveData;
-    (void)boxIndex;
-    (void)boxData;
-    return false;
+    int boxIndex, int slotIndex, const pksm::PKX& pkx
+) {
+    if (!saveData) return false;
+
+    try {
+        auto *sav = GetSavForSaveData(saveData);
+        if (!sav) return false;
+        if (boxIndex < 0 || boxIndex >= sav->maxBoxes() || slotIndex < 0 || slotIndex >= 30)
+            return false;
+
+        // sav->pkm() setter expects a decrypted PKX — the save handles internal encryption
+        sav->pkm(pkx, static_cast<u8>(boxIndex), static_cast<u8>(slotIndex), false);
+        saveDirty = true;
+        return true;
+    } catch (const std::exception &e) {
+        pksm::utils::Logger::Error(std::string("[BoxDataProvider] WritePokemon failed: ") + e.what());
+        return false;
+    }
+}
+
+bool BoxDataProvider::ClearSlot(
+    const pksm::saves::SaveData::Ref& saveData,
+    int boxIndex, int slotIndex
+) {
+    if (!saveData) return false;
+
+    try {
+        auto *sav = GetSavForSaveData(saveData);
+        if (!sav) return false;
+        if (boxIndex < 0 || boxIndex >= sav->maxBoxes() || slotIndex < 0 || slotIndex >= 30)
+            return false;
+
+        // Read the existing PKX to get the right type/size for this save, then zero it out.
+        // A zeroed PKX has species==0 which the read path treats as empty.
+        auto pk = sav->pkm(static_cast<u8>(boxIndex), static_cast<u8>(slotIndex));
+        if (pk) {
+            std::fill_n(pk->rawData().data(), pk->getLength(), u8(0));
+            sav->pkm(*pk, static_cast<u8>(boxIndex), static_cast<u8>(slotIndex), false);
+        }
+
+        saveDirty = true;
+        return true;
+    } catch (const std::exception &e) {
+        pksm::utils::Logger::Error(std::string("[BoxDataProvider] ClearSlot failed: ") + e.what());
+        return false;
+    }
+}
+
+bool BoxDataProvider::HasPendingWrites() const {
+    return saveDirty;
+}
+
+bool BoxDataProvider::FlushPendingWrites() const {
+    if (!saveDirty) {
+        return true;
+    }
+
+    if (!cachedSav || cachedSaveName.empty()) {
+        return false;
+    }
+
+    if (!PersistSave(cachedSav.get(), cachedSaveName)) {
+        return false;
+    }
+
+    saveDirty = false;
+    return true;
+}
+
+void BoxDataProvider::DiscardPendingWrites() const {
+    if (!saveDirty) {
+        return;
+    }
+
+    cachedSav.reset();
+    cachedSaveDataPtr = nullptr;
+    cachedSaveName.clear();
+    saveDirty = false;
+}
+
+bool BoxDataProvider::PersistSave(pksm::Sav* sav, const std::string& saveName) const {
+    // Same persistence pipeline as SaveDataAccessor::saveChanges():
+    // finishEditing (encrypt) → write to file → commit device → beginEditing (decrypt for reuse)
+    try {
+        sav->finishEditing();
+
+        const bool isSaveDevicePath = saveName.rfind("save:/", 0) == 0;
+        const std::string savePath = isSaveDevicePath ? saveName : (std::string("save:/") + saveName);
+
+        const size_t outSize = static_cast<size_t>(sav->getEntireLengthIncludingFooter());
+
+        std::ofstream out(savePath, std::ios::binary | std::ios::trunc);
+        if (!out.good()) {
+            pksm::utils::Logger::Error("[BoxDataProvider] Failed to open save for writing: " + savePath);
+            sav->beginEditing();
+            return false;
+        }
+
+        out.write(reinterpret_cast<const char*>(sav->rawData().get()),
+                  static_cast<std::streamsize>(outSize));
+        out.flush();
+        out.close();
+
+        const Result rc = fsdevCommitDevice("save");
+        // Re-decrypt so subsequent reads/writes continue to work
+        sav->beginEditing();
+
+        if (R_FAILED(rc)) {
+            pksm::utils::Logger::Error("[BoxDataProvider] Failed to commit save device");
+            return false;
+        }
+
+        return true;
+    } catch (const std::exception &e) {
+        pksm::utils::Logger::Error(std::string("[BoxDataProvider] PersistSave failed: ") + e.what());
+        // Ensure save is back in editing mode even on failure
+        try { sav->beginEditing(); } catch (...) {}
+        return false;
+    }
+}
+
+std::unique_ptr<pksm::PKX> BoxDataProvider::PrepareForWrite(
+    const pksm::saves::SaveData::Ref& saveData,
+    const pksm::PKX& pkx)
+{
+    auto* sav = GetSavForSaveData(saveData);
+    if (!sav) return nullptr;
+
+    // PLA special case: convertToG8() returns std::unique_ptr<PK8> (can't return PA8
+    // due to the fixed return type), so we detect PLA target and post-convert PK8→PA8.
+    if (sav->version() == pksm::GameVersion::PLA)
+    {
+        if (pkx.extension() == ".pa8") return pkx.clone(); // Already native format
+        auto pk8 = pkx.convertToG8(*sav);
+        if (!pk8) return nullptr;
+        return ConvertPK8toPA8(*pk8);
+    }
+
+    // All other saves: Sav::transfer() dispatches to the correct convertToGX()
+    return sav->transfer(pkx);
 }

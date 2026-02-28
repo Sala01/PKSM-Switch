@@ -4,6 +4,7 @@
 #include <map>
 #include <pu/Plutonium>
 
+#include "data/providers/interfaces/IBoxDataProvider.hpp"
 #include "data/providers/interfaces/ISaveDataAccessor.hpp"
 #include "gui/screens/main-menu/sub-components/TrainerInfo.hpp"
 #include "gui/screens/main-menu/sub-components/menu-grid/MenuButtonGrid.hpp"
@@ -27,6 +28,8 @@ namespace pksm::layout
             std::function<void(pu::ui::Overlay::Ref)> onShowOverlay,
             std::function<void()> onHideOverlay,
             ISaveDataAccessor::Ref saveDataAccessor,
+            IBoxDataProvider::Ref boxDataProvider,
+            IBoxDataProvider::Ref bankBoxDataProvider,
             std::map<pksm::ui::MenuButtonType, std::function<void()>> navigationCallbacks);
         PU_SMART_CTOR(MainMenu)
         ~MainMenu();
@@ -41,6 +44,8 @@ namespace pksm::layout
         pksm::ui::TrainerInfo::Ref trainerInfo;
         pksm::ui::MenuButtonGrid::Ref menuGrid;
         ISaveDataAccessor::Ref saveDataAccessor;
+        IBoxDataProvider::Ref boxDataProvider;
+        IBoxDataProvider::Ref bankBoxDataProvider;
         std::map<pksm::ui::MenuButtonType, std::function<void()>> navigationCallbacks;
         pksm::input::ButtonInputHandler buttonHandler;
 
@@ -51,6 +56,7 @@ namespace pksm::layout
         bool isExitConfirmVisible;
         int exitConfirmSelectedIndex;
         pksm::ui::ConfirmExitOverlay::Ref exitConfirmOverlay;
+        bool exitConfirmPending;
 
         // Layout constants
         static constexpr pu::i32 TRAINER_INFO_SIDE_MARGIN = 40;  // Margin from screen edges

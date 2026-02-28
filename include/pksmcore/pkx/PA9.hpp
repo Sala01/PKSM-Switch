@@ -61,6 +61,8 @@ namespace pksm
         [[nodiscard]] std::string_view extension() const override { return ".pa9"; }
 
         [[nodiscard]] std::unique_ptr<PKX> clone(void) const override;
+        [[nodiscard]] std::unique_ptr<PKX> convertToG9(Sav& save) const override;
+        [[nodiscard]] std::unique_ptr<PK8> convertToG8(Sav& save) const override;
 
         [[nodiscard]] Generation generation(void) const override;
         void decrypt(void) override;

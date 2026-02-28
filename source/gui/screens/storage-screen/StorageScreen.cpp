@@ -5,6 +5,16 @@
 #include "gui/screens/main-menu/sub-components/menu-grid/MenuButtonGrid.hpp"
 #include "utils/Logger.hpp"
 
+namespace {
+
+pksm::ui::BoxPokemonData PkxToVisual(const pksm::PKX& pk) {
+    const u16 form_u16 = pk.alternativeForm();
+    const u8 form = form_u16 > 255 ? 0 : static_cast<u8>(form_u16);
+    return pksm::ui::BoxPokemonData(static_cast<u16>(pk.species()), form, pk.shiny());
+}
+
+} // namespace
+
 namespace pksm::layout {
 
 StorageScreen::StorageScreen(
@@ -41,8 +51,22 @@ StorageScreen::StorageScreen(
     // Initialize help footer
     InitializeHelpFooter();
 
-    // Set up button input handler for Back button
+    // A button: pick up or place down Pokemon
+    buttonHandler.RegisterButton(HidNpadButton_A, nullptr, [this]() {
+        if (isSummaryOverlayVisible) return;
+        if (heldPokemon.has_value()) {
+            PlaceDown();
+        } else {
+            PickUp();
+        }
+    });
+
+    // B button: cancel pick-up if holding, otherwise go back
     buttonHandler.RegisterButton(HidNpadButton_B, nullptr, [this]() {
+        if (heldPokemon.has_value()) {
+            CancelPickUp();
+            return;
+        }
         LOG_DEBUG("B button pressed, returning to main menu");
         if (this->onBack) {
             this->onBack();
@@ -50,7 +74,7 @@ StorageScreen::StorageScreen(
     });
 
     buttonHandler.RegisterButton(HidNpadButton_X, nullptr, [this]() {
-        if (isSummaryOverlayVisible) {
+        if (isSummaryOverlayVisible || heldPokemon.has_value()) {
             return;
         }
 
@@ -111,14 +135,7 @@ StorageScreen::StorageScreen(
     });
 
     // Set initial help items
-    std::vector<pksm::ui::HelpItem> helpItems = {
-        {{{pksm::ui::global::ButtonGlyph::A}}, "Select"},
-        {{{pksm::ui::global::ButtonGlyph::B}}, "Back to Main Menu"},
-        {{{pksm::ui::global::ButtonGlyph::X}}, "Summary"},
-        {{{pksm::ui::global::ButtonGlyph::L}, {pksm::ui::global::ButtonGlyph::R}}, "Switch Box"},
-        {{{pksm::ui::global::ButtonGlyph::DPad}}, "Navigate Box"},
-    };
-    helpFooter->SetHelpItems(helpItems);
+    UpdateHelpFooter();
 
     // Set up input handling
     this->SetOnInput(
@@ -356,6 +373,230 @@ void StorageScreen::SetActiveBox(ActiveBox box) {
     }
 
     pokemonBoxDirectionalHandler.ClearState();
+}
+
+void StorageScreen::PickUp() {
+    const bool isBank = (activeBox == ActiveBox::Bank);
+    pksm::ui::PokemonBox::Ref targetBox = isBank ? pokemonBankBox : pokemonSaveBox;
+    IBoxDataProvider::Ref provider = isBank ? bankBoxDataProvider : boxDataProvider;
+
+    if (!targetBox || !provider) return;
+
+    const int boxIndex = targetBox->GetCurrentBox();
+    const int slotIndex = targetBox->GetSelectedSlot();
+    if (slotIndex < 0) return;
+
+    const auto slotVisual = targetBox->GetPokemonData(boxIndex, slotIndex);
+    if (slotVisual.isEmpty()) return;
+
+    auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
+    auto pk = provider->GetPokemon(saveData, boxIndex, slotIndex);
+    if (!pk) return;
+
+    // Store held Pokemon with original source info and visually clear the source slot
+    heldPokemon = HeldPokemon{
+        std::move(pk), provider, boxIndex, slotIndex, isBank, slotVisual
+    };
+    deferredWrites.clear();
+    targetBox->SetPokemonData(boxIndex, slotIndex, pksm::ui::BoxPokemonData());
+
+    LOG_DEBUG("Picked up Pokemon from " + std::string(isBank ? "Bank" : "Save") +
+              " Box " + std::to_string(boxIndex) + " Slot " + std::to_string(slotIndex));
+    UpdateHelpFooter();
+}
+
+void StorageScreen::PlaceDown() {
+    if (!heldPokemon.has_value()) return;
+
+    const bool destIsBank = (activeBox == ActiveBox::Bank);
+    pksm::ui::PokemonBox::Ref destBox = destIsBank ? pokemonBankBox : pokemonSaveBox;
+    IBoxDataProvider::Ref destProvider = destIsBank ? bankBoxDataProvider : boxDataProvider;
+
+    if (!destBox || !destProvider) return;
+
+    const int destBoxIndex = destBox->GetCurrentBox();
+    const int destSlotIndex = destBox->GetSelectedSlot();
+    if (destSlotIndex < 0) return;
+
+    // Placing back on original slot with no pending swaps = simple cancel
+    if (deferredWrites.empty() &&
+        destProvider == heldPokemon->originalProvider &&
+        destBoxIndex == heldPokemon->originalBox &&
+        destSlotIndex == heldPokemon->originalSlot) {
+        CancelPickUp();
+        return;
+    }
+
+    const auto destSlotVisual = destBox->GetPokemonData(destBoxIndex, destSlotIndex);
+
+    if (destSlotVisual.isEmpty()) {
+        // ── Place into empty slot: commit all deferred writes + final placement ──
+        auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
+
+        // Convert held Pokemon to destination format before writing
+        auto prepared = destProvider->PrepareForWrite(saveData, *heldPokemon->pkx);
+        if (!prepared) {
+            LOG_DEBUG("Cannot place: incompatible format for destination save");
+            return; // User stays holding, placement blocked
+        }
+
+        bool allOk = true;
+
+        // Flush all deferred writes to disk (already converted at carry-swap time)
+        for (const auto& dw : deferredWrites) {
+            if (!dw.provider->WritePokemon(saveData, dw.boxIndex, dw.slotIndex, *dw.pkx)) {
+                LOG_ERROR("Failed to commit deferred write at Box " +
+                          std::to_string(dw.boxIndex) + " Slot " + std::to_string(dw.slotIndex));
+                allOk = false;
+            }
+        }
+
+        // Write converted Pokemon to the final destination
+        if (!destProvider->WritePokemon(saveData, destBoxIndex, destSlotIndex, *prepared)) {
+            LOG_ERROR("Failed to write held Pokemon to final destination");
+            allOk = false;
+        }
+
+        // Clear the original source on disk, unless a deferred write or the
+        // final destination already covers that slot
+        bool originalCovered = (destProvider == heldPokemon->originalProvider &&
+                                destBoxIndex == heldPokemon->originalBox &&
+                                destSlotIndex == heldPokemon->originalSlot);
+        if (!originalCovered) {
+            for (const auto& dw : deferredWrites) {
+                if (dw.provider == heldPokemon->originalProvider &&
+                    dw.boxIndex == heldPokemon->originalBox &&
+                    dw.slotIndex == heldPokemon->originalSlot) {
+                    originalCovered = true;
+                    break;
+                }
+            }
+        }
+        if (!originalCovered) {
+            heldPokemon->originalProvider->ClearSlot(
+                saveData, heldPokemon->originalBox, heldPokemon->originalSlot);
+        }
+
+        // Update destination visual
+        destBox->SetPokemonData(destBoxIndex, destSlotIndex, PkxToVisual(*prepared));
+
+        if (!allOk) {
+            LOG_ERROR("Some writes failed during commit — reload box data for accurate state");
+        }
+        LOG_DEBUG("Committed " + std::to_string(deferredWrites.size()) +
+                  " deferred writes + final placement at " +
+                  std::string(destIsBank ? "Bank" : "Save") +
+                  " Box " + std::to_string(destBoxIndex) +
+                  " Slot " + std::to_string(destSlotIndex));
+
+        deferredWrites.clear();
+        heldPokemon.reset();
+        UpdateHelpFooter();
+
+    } else {
+        // ── Carry-swap: displace the destination Pokemon and keep carrying ──
+
+        // Check if a deferred write already targets this slot
+        DeferredWrite* existing = nullptr;
+        for (auto& dw : deferredWrites) {
+            if (dw.provider == destProvider &&
+                dw.boxIndex == destBoxIndex &&
+                dw.slotIndex == destSlotIndex) {
+                existing = &dw;
+                break;
+            }
+        }
+
+        if (existing) {
+            // Slot already has a deferred write — swap PKX pointers
+            auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
+            auto prepared = destProvider->PrepareForWrite(saveData, *heldPokemon->pkx);
+            if (!prepared) {
+                LOG_DEBUG("Cannot swap: incompatible format for destination");
+                return;
+            }
+            auto displaced = std::move(existing->pkx);
+            existing->pkx = std::move(prepared);
+            heldPokemon->pkx = std::move(displaced);
+            // previousVisual stays unchanged (original disk state)
+            destBox->SetPokemonData(destBoxIndex, destSlotIndex, PkxToVisual(*existing->pkx));
+        } else {
+            // New slot — read the current occupant from disk
+            auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
+
+            auto prepared = destProvider->PrepareForWrite(saveData, *heldPokemon->pkx);
+            if (!prepared) {
+                LOG_DEBUG("Cannot swap: incompatible format for destination");
+                return;
+            }
+
+            auto displaced = destProvider->GetPokemon(saveData, destBoxIndex, destSlotIndex);
+            if (!displaced) {
+                LOG_ERROR("Failed to read destination Pokemon for carry-swap");
+                return;
+            }
+
+            DeferredWrite dw{
+                destProvider, destBoxIndex, destSlotIndex, destIsBank,
+                std::move(prepared), destSlotVisual
+            };
+            destBox->SetPokemonData(destBoxIndex, destSlotIndex, PkxToVisual(*dw.pkx));
+            deferredWrites.push_back(std::move(dw));
+            heldPokemon->pkx = std::move(displaced);
+        }
+
+        LOG_DEBUG("Carry-swap at " + std::string(destIsBank ? "Bank" : "Save") +
+                  " Box " + std::to_string(destBoxIndex) +
+                  " Slot " + std::to_string(destSlotIndex) +
+                  " (chain length: " + std::to_string(deferredWrites.size()) + ")");
+    }
+}
+
+void StorageScreen::CancelPickUp() {
+    if (!heldPokemon.has_value()) return;
+
+    // Restore all deferred write visuals in reverse order
+    for (auto it = deferredWrites.rbegin(); it != deferredWrites.rend(); ++it) {
+        pksm::ui::PokemonBox::Ref box = it->isBank ? pokemonBankBox : pokemonSaveBox;
+        if (box) {
+            box->SetPokemonData(it->boxIndex, it->slotIndex, it->previousVisual);
+        }
+    }
+
+    // Restore the original source slot visual
+    pksm::ui::PokemonBox::Ref sourceBox = heldPokemon->originalFromBank ? pokemonBankBox : pokemonSaveBox;
+    if (sourceBox) {
+        sourceBox->SetPokemonData(heldPokemon->originalBox, heldPokemon->originalSlot,
+                                  heldPokemon->originalVisual);
+    }
+
+    LOG_DEBUG("Cancelled pick-up, restored " + std::to_string(deferredWrites.size()) + " deferred writes");
+    deferredWrites.clear();
+    heldPokemon.reset();
+    UpdateHelpFooter();
+}
+
+void StorageScreen::UpdateHelpFooter() {
+    if (!helpFooter) return;
+
+    std::vector<pksm::ui::HelpItem> helpItems;
+    if (heldPokemon.has_value()) {
+        helpItems = {
+            {{{pksm::ui::global::ButtonGlyph::A}}, "Place / Swap"},
+            {{{pksm::ui::global::ButtonGlyph::B}}, "Cancel"},
+            {{{pksm::ui::global::ButtonGlyph::L}, {pksm::ui::global::ButtonGlyph::R}}, "Switch Box"},
+            {{{pksm::ui::global::ButtonGlyph::DPad}}, "Navigate Box"},
+        };
+    } else {
+        helpItems = {
+            {{{pksm::ui::global::ButtonGlyph::A}}, "Pick Up"},
+            {{{pksm::ui::global::ButtonGlyph::B}}, "Back to Main Menu"},
+            {{{pksm::ui::global::ButtonGlyph::X}}, "Summary"},
+            {{{pksm::ui::global::ButtonGlyph::L}, {pksm::ui::global::ButtonGlyph::R}}, "Switch Box"},
+            {{{pksm::ui::global::ButtonGlyph::DPad}}, "Navigate Box"},
+        };
+    }
+    helpFooter->SetHelpItems(helpItems);
 }
 
 }  // namespace pksm::layout

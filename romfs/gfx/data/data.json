@@ -11979,6 +11979,20 @@
   ],
   "games": [
     {
+      "name": "Pokémon FireRed Version",
+      "title_id": "0100554023408000",
+      "icon_path": "romfs:/gfx/data/game_icons/firered_icon.jpg",
+      "category": "console",
+      "main_save_file": "FireRed_e.sav"
+    },
+    {
+      "name": "Pokémon LeafGreen Version",
+      "title_id": "010034D02340E000",
+      "icon_path": "romfs:/gfx/data/game_icons/leafgreen_icon.jpg",
+      "category": "console",
+      "main_save_file": "LeafGreen_e.sav"
+    },
+    {
       "name": "Pokémon: Let's Go Pikachu",
       "title_id": "010003F003A34000",
       "icon_path": "romfs:/gfx/data/game_icons/lg_pikachu_icon.jpg",
@@ -12007,20 +12021,6 @@
       "main_save_file": "main"
     },
     {
-      "name": "Pokémon Brilliant Diamond",
-      "title_id": "0100000011D90000",
-      "icon_path": "romfs:/gfx/data/game_icons/brilliant_diamond_icon.jpg",
-      "category": "console",
-      "main_save_file": "SaveData.bin"
-    },
-    {
-      "name": "Pokémon Shining Pearl",
-      "title_id": "010018E011D92000",
-      "icon_path": "romfs:/gfx/data/game_icons/shining_pearl_icon.jpg",
-      "category": "console",
-      "main_save_file": "SaveData.bin"
-    },
-    {
       "name": "Pokémon Scarlet",
       "title_id": "0100A3D008C5C000",
       "icon_path": "romfs:/gfx/data/game_icons/scarlet_icon.jpg",
@@ -12033,6 +12033,20 @@
       "icon_path": "romfs:/gfx/data/game_icons/violet_icon.jpg",
       "category": "console",
       "main_save_file": "main"
+    },
+    {
+      "name": "Pokémon Brilliant Diamond",
+      "title_id": "0100000011D90000",
+      "icon_path": "romfs:/gfx/data/game_icons/brilliant_diamond_icon.jpg",
+      "category": "console",
+      "main_save_file": "SaveData.bin"
+    },
+    {
+      "name": "Pokémon Shining Pearl",
+      "title_id": "010018E011D92000",
+      "icon_path": "romfs:/gfx/data/game_icons/shining_pearl_icon.jpg",
+      "category": "console",
+      "main_save_file": "SaveData.bin"
     },
     {
       "name": "Pokémon Legends: Arceus",

@@ -11,6 +11,8 @@ PokemonSummaryOverlay::PokemonSummaryOverlay(const pu::i32 x, const pu::i32 y, c
     this->SetRadius(0);
     this->SetMaxFadeAlpha(200);
     this->SetFadeAlphaVariation(18);
+
+    this->PANEL_X = (this->GetWidth() - PANEL_W) / 2;
 }
 
 void PokemonSummaryOverlay::SetPokemon(std::unique_ptr<pksm::PKX> pk) {
@@ -20,10 +22,10 @@ void PokemonSummaryOverlay::SetPokemon(std::unique_ptr<pksm::PKX> pk) {
 
 static std::string GenderSymbol(const pksm::Gender g) {
     if (g == pksm::Gender::Male) {
-        return "\xE2\x99\x82"; // ♂
+        return "♂"; // ♂
     }
     if (g == pksm::Gender::Female) {
-        return "\xE2\x99\x80"; // ♀
+        return "♀"; // ♀
     }
     return "-";
 }
@@ -208,7 +210,7 @@ void PokemonSummaryOverlay::Rebuild() {
     const pu::i32 leftCardX = leftX - 18;
     const pu::i32 leftCardY = contentTop;
     const pu::i32 leftCardW = LEFT_COL_W + 36;
-    const pu::i32 leftCardH = PANEL_Y + PANEL_H - PAD - leftCardY;
+    const pu::i32 leftCardH = PANEL_Y + PANEL_H - PAD - leftCardY + 32;
     auto leftCardBorder = pu::ui::elm::Rectangle::New(leftCardX, leftCardY, leftCardW, leftCardH, cardBorder, 26);
     auto leftCard = pu::ui::elm::Rectangle::New(leftCardX + 4, leftCardY + 4, leftCardW - 8, leftCardH - 8, cardBg, 24);
     this->Add(leftCardBorder);
@@ -217,7 +219,7 @@ void PokemonSummaryOverlay::Rebuild() {
     const pu::i32 rightCardX = rightX - 18;
     const pu::i32 rightCardY = contentTop;
     const pu::i32 rightCardW = PANEL_X + PANEL_W - PAD - rightX + 36;
-    const pu::i32 rightCardH = PANEL_Y + PANEL_H - PAD - rightCardY;
+    const pu::i32 rightCardH = PANEL_Y + PANEL_H - PAD - rightCardY + 32;
     auto rightCardBorder = pu::ui::elm::Rectangle::New(rightCardX, rightCardY, rightCardW, rightCardH, cardBorder, 26);
     auto rightCard = pu::ui::elm::Rectangle::New(rightCardX + 4, rightCardY + 4, rightCardW - 8, rightCardH - 8, cardBg, 24);
     this->Add(rightCardBorder);

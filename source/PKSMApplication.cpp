@@ -311,6 +311,8 @@ void PKSMApplication::OnLoad() {
             [this](pu::ui::Overlay::Ref overlay) { this->StartOverlay(overlay); },
             [this]() { this->EndOverlay(); },
             saveDataAccessor,  // Pass the save data accessor to the main menu
+            boxDataProvider,  // Allow main menu to flush/discard save box changes
+            bankBoxDataProvider,  // Allow main menu to flush/discard bank changes
             navigationCallbacks  // Pass navigation callbacks to the main menu
         );
 

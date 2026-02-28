@@ -176,6 +176,8 @@ BankBoxDataProvider::BankBoxDataProvider(std::string bankName)
     : bankName(std::move(bankName)),
       rootPath(BANKS_ROOT),
       loaded(false),
+      bankDirty(false),
+      namesDirty(false),
       boxCount(0),
       entries(),
       boxNames() {}
@@ -188,6 +190,8 @@ void BankBoxDataProvider::EnsureLoaded() const {
     }
 
     loaded = true;
+    bankDirty = false;
+    namesDirty = false;
 
     try {
         const auto root = std::filesystem::path(rootPath);
@@ -467,7 +471,8 @@ bool BankBoxDataProvider::WritePokemon(int boxIndex, int slotIndex, const pksm::
         const size_t copyLen = std::min(static_cast<size_t>(toStore->getLength()), BANK_DATA_SIZE);
         std::copy_n(toStore->rawData().data(), copyLen, entry.data);
 
-        return SaveBank();
+        bankDirty = true;
+        return true;
     } catch (const std::exception &e) {
         pksm::utils::Logger::Error(std::string("[BankBoxDataProvider] WritePokemon failed: ") + e.what());
         return false;
@@ -487,7 +492,8 @@ bool BankBoxDataProvider::ClearSlot(int boxIndex, int slotIndex) {
     }
 
     FillEntryEmpty(entries[idx].entry);
-    return SaveBank();
+    bankDirty = true;
+    return true;
 }
 
 bool BankBoxDataProvider::SetBoxName(int boxIndex, const std::string& name) {
@@ -501,7 +507,45 @@ bool BankBoxDataProvider::SetBoxName(int boxIndex, const std::string& name) {
         boxNames[boxIndex] = name;
     }
 
-    return SaveNames();
+    namesDirty = true;
+    return true;
+}
+
+bool BankBoxDataProvider::HasPendingWrites() const {
+    EnsureLoaded();
+    return bankDirty || namesDirty;
+}
+
+bool BankBoxDataProvider::FlushPendingWrites() const {
+    EnsureLoaded();
+
+    bool ok = true;
+    if (bankDirty) {
+        ok = SaveBank() && ok;
+    }
+    if (namesDirty) {
+        ok = SaveNames() && ok;
+    }
+
+    if (ok) {
+        bankDirty = false;
+        namesDirty = false;
+    }
+
+    return ok;
+}
+
+void BankBoxDataProvider::DiscardPendingWrites() const {
+    if (!loaded) {
+        return;
+    }
+
+    bankDirty = false;
+    namesDirty = false;
+    loaded = false;
+    boxCount = 0;
+    entries.clear();
+    boxNames.clear();
 }
 
 bool BankBoxDataProvider::SaveBank() const {

@@ -373,29 +373,15 @@ void pksm::ui::GameList::UpdateGameListData() {
                     return !this->saveProvider->GetSavesForTitle(t, this->currentUserId).empty();
                 };
 
-                auto IsInstalledTitleId = [](const std::vector<titles::Title::Ref>& installed, const titles::Title::Ref& t) {
-                    if (!t) {
-                        return false;
-                    }
-                    for (const auto& it : installed) {
-                        if (it && it->getTitleId() == t->getTitleId()) {
-                            return true;
-                        }
-                    }
-                    return false;
-                };
-
                 // Get installed titles for current user
                 auto installedTitles = titleProvider->GetInstalledTitles(currentUserId);
 
-                // Add game card title if present
+                // Always reserve index 0 for the game card slot (can be nullptr)
                 auto gameCardTitle = titleProvider->GetGameCardTitle();
-                if (gameCardTitle) {
-                    // Only treat as "game card" if it's not already in the installed list
-                    if (!IsInstalledTitleId(installedTitles, gameCardTitle) && HasSavesForCurrentUser(gameCardTitle)) {
-                        consoleTitles.push_back(gameCardTitle);
-                    }
+                if (gameCardTitle && !HasSavesForCurrentUser(gameCardTitle)) {
+                    gameCardTitle = nullptr;
                 }
+                consoleTitles.push_back(gameCardTitle);
 
                 // Add installed titles for current user
                 for (const auto& t : installedTitles) {
@@ -403,6 +389,7 @@ void pksm::ui::GameList::UpdateGameListData() {
                         consoleTitles.push_back(t);
                     }
                 }
+
                 list->SetDataSource(consoleTitles);
                 break;
             }
@@ -420,51 +407,40 @@ void pksm::ui::GameList::UpdateConsoleGameListData() {
     // Only update the console game list
     for (size_t i = 0; i < NAVIGATION_ORDER.size(); i++) {
         const auto& info = NAVIGATION_ORDER[i];
-        if (info.type == GameListType::Console) {
-            auto& list = gameLists[i];
-            std::vector<titles::Title::Ref> consoleTitles;
-
-            auto HasSavesForCurrentUser = [this](const titles::Title::Ref& t) {
-                if (!this->saveProvider) {
-                    return true;
-                }
-                return !this->saveProvider->GetSavesForTitle(t, this->currentUserId).empty();
-            };
-
-            auto IsInstalledTitleId = [](const std::vector<titles::Title::Ref>& installed, const titles::Title::Ref& t) {
-                if (!t) {
-                    return false;
-                }
-                for (const auto& it : installed) {
-                    if (it && it->getTitleId() == t->getTitleId()) {
-                        return true;
-                    }
-                }
-                return false;
-            };
-
-            // Get installed titles for current user
-            auto installedTitles = titleProvider->GetInstalledTitles(currentUserId);
-
-            // Add game card title if present
-            auto gameCardTitle = titleProvider->GetGameCardTitle();
-            if (gameCardTitle) {
-                // Only treat as "game card" if it's not already in the installed list
-                if (!IsInstalledTitleId(installedTitles, gameCardTitle) && HasSavesForCurrentUser(gameCardTitle)) {
-                    consoleTitles.push_back(gameCardTitle);
-                }
-            }
-
-            // Add installed titles for current user
-            for (const auto& t : installedTitles) {
-                if (HasSavesForCurrentUser(t)) {
-                    consoleTitles.push_back(t);
-                }
-            }
-            list->SetDataSource(consoleTitles);
-            onSelectionChangedCallback();
-            break;
+        if (info.type != GameListType::Console) {
+            continue;
         }
+
+        auto& list = gameLists[i];
+        std::vector<titles::Title::Ref> consoleTitles;
+
+        auto HasSavesForCurrentUser = [this](const titles::Title::Ref& t) {
+            if (!this->saveProvider) {
+                return true;
+            }
+            return !this->saveProvider->GetSavesForTitle(t, this->currentUserId).empty();
+        };
+
+        // Get installed titles for current user
+        auto installedTitles = titleProvider->GetInstalledTitles(currentUserId);
+
+        // Always reserve index 0 for the game card slot (can be nullptr)
+        auto gameCardTitle = titleProvider->GetGameCardTitle();
+        if (gameCardTitle && !HasSavesForCurrentUser(gameCardTitle)) {
+            gameCardTitle = nullptr;
+        }
+        consoleTitles.push_back(gameCardTitle);
+
+        // Add installed titles for current user
+        for (const auto& t : installedTitles) {
+            if (HasSavesForCurrentUser(t)) {
+                consoleTitles.push_back(t);
+            }
+        }
+
+        list->SetDataSource(consoleTitles);
+        onSelectionChangedCallback();
+        break;
     }
 }
 

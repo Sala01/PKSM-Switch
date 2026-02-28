@@ -26,6 +26,7 @@
 
 #include "pkx/PA8.hpp"
 #include "pkx/PA9.hpp"
+#include "pkx/PK8.hpp"
 #include "pkx/PK9.hpp"
 #include "sav/Sav.hpp"
 #include "utils/crypto.hpp"
@@ -184,6 +185,83 @@ namespace pksm
         pk9->refreshChecksum();
 
         return pk9;
+    }
+
+    std::unique_ptr<PK8> PA8::convertToG8(Sav& save) const
+    {
+        auto pk8 = PKX::getPKM<PK8>(nullptr, PK8::BOX_LENGTH);
+
+        pk8->encryptionConstant(encryptionConstant());
+        pk8->species(species());
+        pk8->TID(TID());
+        pk8->SID(SID());
+        pk8->experience(experience());
+        pk8->PID(PID());
+
+        if (ability() == PersonalSWSH::ability(formSpecies(), abilityNumber() >> 1))
+        {
+            pk8->setAbility(abilityNumber() >> 1);
+        }
+        else
+        {
+            pk8->ability(ability());
+            pk8->abilityNumber(abilityNumber());
+        }
+
+        pk8->language(language());
+        pk8->heldItem(heldItem());
+        pk8->markValue(markValue());
+
+        for (Stat stat : {Stat::HP, Stat::ATK, Stat::DEF, Stat::SPATK, Stat::SPDEF, Stat::SPD})
+        {
+            pk8->ev(stat, ev(stat));
+            pk8->iv(stat, iv(stat));
+            pk8->hyperTrain(stat, hyperTrain(stat));
+        }
+
+        for (size_t i = 0; i < 4; i++)
+        {
+            pk8->move(i, move(i));
+            pk8->PPUp(i, PPUp(i));
+            pk8->PP(i, PP(i));
+            pk8->relearnMove(i, relearnMove(i));
+        }
+
+        pk8->egg(egg());
+        pk8->nicknamed(nicknamed());
+        pk8->nickname(nickname());
+        pk8->fatefulEncounter(fatefulEncounter());
+        pk8->gender(gender());
+        pk8->otGender(otGender());
+        pk8->alternativeForm(alternativeForm());
+        pk8->nature(nature());
+        pk8->origNature(nature());
+
+        pk8->version(version());
+        pk8->otName(otName());
+        pk8->otFriendship(otFriendship());
+        pk8->metDate(metDate());
+        pk8->eggDate(eggDate());
+        pk8->metLocation(metLocation());
+        pk8->eggLocation(eggLocation());
+        pk8->ball(ball());
+        pk8->metLevel(metLevel());
+        pk8->currentHandler(currentHandler());
+        pk8->htFriendship(htFriendship());
+
+        pk8->pkrsStrain(pkrsStrain());
+        pk8->pkrsDays(pkrsDays());
+
+        for (size_t i = 0; i < 6; i++)
+        {
+            pk8->contest(i, contest(i));
+        }
+
+        // PA8 ribbon support is stubbed; no ribbons are awarded in PLA
+
+        pk8->refreshChecksum();
+
+        return pk8;
     }
 
     Generation PA8::generation(void) const

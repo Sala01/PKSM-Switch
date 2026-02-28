@@ -18,6 +18,8 @@ class BoxDataProvider : public IBoxDataProvider
 private:
     mutable const pksm::saves::SaveData *cachedSaveDataPtr = nullptr;
     mutable std::unique_ptr<pksm::Sav> cachedSav;
+    mutable std::string cachedSaveName;
+    mutable bool saveDirty = false;
 
     pksm::Sav *GetSavForSaveData(const pksm::saves::SaveData::Ref &saveData) const;
 
@@ -26,11 +28,8 @@ private:
         const pksm::saves::SaveData::Ref &saveData,
         int boxIndex) const;
 
-    // save box data to save file (TODO)
-    bool SaveBoxDataToFile(
-        const pksm::saves::SaveData::Ref &saveData,
-        int boxIndex,
-        const pksm::ui::BoxData &boxData) const;
+    // Persist the cached save to disk (finishEditing → write → commit → beginEditing)
+    bool PersistSave(pksm::Sav *sav, const std::string &saveName) const;
 
 public:
     BoxDataProvider();
@@ -53,4 +52,23 @@ public:
         const pksm::saves::SaveData::Ref &saveData,
         int boxIndex,
         int slotIndex) const override;
+
+    // Write a full Pokemon to a save box slot and persist to disk
+    bool WritePokemon(
+        const pksm::saves::SaveData::Ref &saveData,
+        int boxIndex, int slotIndex, const pksm::PKX &pkx) override;
+
+    // Clear a save box slot and persist to disk
+    bool ClearSlot(
+        const pksm::saves::SaveData::Ref &saveData,
+        int boxIndex, int slotIndex) override;
+
+    // Convert PKX to the native format for this save before writing
+    std::unique_ptr<pksm::PKX> PrepareForWrite(
+        const pksm::saves::SaveData::Ref &saveData,
+        const pksm::PKX &pkx) override;
+
+    bool HasPendingWrites() const override;
+    bool FlushPendingWrites() const override;
+    void DiscardPendingWrites() const override;
 };
