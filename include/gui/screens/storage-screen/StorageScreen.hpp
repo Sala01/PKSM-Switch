@@ -85,6 +85,9 @@ namespace pksm::layout
         std::optional<HeldPokemon> heldPokemon;
         std::vector<DeferredWrite> deferredWrites;
 
+        // Floating sprite showing the held Pokemon over the cursor
+        pu::ui::elm::Image::Ref heldPokemonImage;
+
         // Layout constants
         static constexpr pu::i32 HEADER_TOP_MARGIN = 35;
         static constexpr pu::i32 SIDE_MARGIN = 70;
@@ -115,6 +118,7 @@ namespace pksm::layout
         void PlaceDown();
         void CancelPickUp();
         void UpdateHelpFooter();
+        void UpdateHeldPokemonImage();
 
         // Override BaseLayout methods
         std::vector<pksm::ui::HelpItem> GetHelpOverlayItems() const override;

@@ -555,6 +555,10 @@ int PokemonBox::GetSelectedSlot() const {
     return static_cast<int>(boxGrid->GetSelectedIndex());
 }
 
+std::pair<pu::i32, pu::i32> PokemonBox::GetSelectedSlotScreenPosition() const {
+    return boxGrid->GetSelectedSlotPosition();
+}
+
 void PokemonBox::SetSelectedSlot(int slotIndex) {
     if (!boxGrid) {
         return;

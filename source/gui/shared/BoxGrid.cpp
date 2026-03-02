@@ -235,6 +235,13 @@ bool pksm::ui::BoxGrid::IsSelected() const {
     return selected;
 }
 
+std::pair<pu::i32, pu::i32> pksm::ui::BoxGrid::GetSelectedSlotPosition() const {
+    if (selectedIndex < items.size()) {
+        return {items[selectedIndex]->GetX(), items[selectedIndex]->GetY()};
+    }
+    return {x, y};
+}
+
 void pksm::ui::BoxGrid::EstablishOwningRelationship() {
     LOG_DEBUG("[BoxGrid] Establishing owning relationship");
 

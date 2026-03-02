@@ -206,14 +206,23 @@ void StorageScreen::InitializePokemonBoxes() {
     pokemonSaveBox->SetName("PokemonSaveBox Element");
     pokemonSaveBox->EstablishOwningRelationship();
 
+    // Held Pokemon floating sprite (added after boxes so it renders on top)
+    heldPokemonImage = pu::ui::elm::Image::New(0, 0, nullptr);
+    heldPokemonImage->SetWidth(BOX_ITEM_SIZE + 12);
+    heldPokemonImage->SetHeight(BOX_ITEM_SIZE + 12);
+    heldPokemonImage->SetVisible(false);
+    this->Add(heldPokemonImage);
+
     // Load box data for both Bank and Save
     LoadBoxData();
 
     pokemonBankBox->SetOnSelectionChanged([this](int boxIndex, int slotIndex) {
         LOG_DEBUG("Bank box selection changed: Box " + std::to_string(boxIndex) + ", Slot " + std::to_string(slotIndex));
+        UpdateHeldPokemonImage();
     });
     pokemonSaveBox->SetOnSelectionChanged([this](int boxIndex, int slotIndex) {
         LOG_DEBUG("Save box selection changed: Box " + std::to_string(boxIndex) + ", Slot " + std::to_string(slotIndex));
+        UpdateHeldPokemonImage();
     });
 
     SetActiveBox(ActiveBox::Save);
@@ -373,6 +382,7 @@ void StorageScreen::SetActiveBox(ActiveBox box) {
     }
 
     pokemonBoxDirectionalHandler.ClearState();
+    UpdateHeldPokemonImage();
 }
 
 void StorageScreen::PickUp() {
@@ -402,6 +412,7 @@ void StorageScreen::PickUp() {
 
     LOG_DEBUG("Picked up Pokemon from " + std::string(isBank ? "Bank" : "Save") +
               " Box " + std::to_string(boxIndex) + " Slot " + std::to_string(slotIndex));
+    UpdateHeldPokemonImage();
     UpdateHelpFooter();
 }
 
@@ -491,6 +502,7 @@ void StorageScreen::PlaceDown() {
 
         deferredWrites.clear();
         heldPokemon.reset();
+        UpdateHeldPokemonImage();
         UpdateHelpFooter();
 
     } else {
@@ -545,6 +557,9 @@ void StorageScreen::PlaceDown() {
             heldPokemon->pkx = std::move(displaced);
         }
 
+        // Update held sprite (held Pokemon changed after swap)
+        UpdateHeldPokemonImage();
+
         LOG_DEBUG("Carry-swap at " + std::string(destIsBank ? "Bank" : "Save") +
                   " Box " + std::to_string(destBoxIndex) +
                   " Slot " + std::to_string(destSlotIndex) +
@@ -573,7 +588,34 @@ void StorageScreen::CancelPickUp() {
     LOG_DEBUG("Cancelled pick-up, restored " + std::to_string(deferredWrites.size()) + " deferred writes");
     deferredWrites.clear();
     heldPokemon.reset();
+    UpdateHeldPokemonImage();
     UpdateHelpFooter();
+}
+
+void StorageScreen::UpdateHeldPokemonImage() {
+    if (!heldPokemonImage) return;
+
+    if (!heldPokemon.has_value()) {
+        heldPokemonImage->SetVisible(false);
+        return;
+    }
+
+    // Update sprite to match the currently held Pokemon (may change after carry-swap)
+    auto visual = PkxToVisual(*heldPokemon->pkx);
+    heldPokemonImage->SetImage(visual.getSprite());
+    heldPokemonImage->SetWidth(BOX_ITEM_SIZE + 12);
+    heldPokemonImage->SetHeight(BOX_ITEM_SIZE + 12);
+
+    // Position at the currently selected slot in the active box
+    auto targetBox = (activeBox == ActiveBox::Bank) ? pokemonBankBox : pokemonSaveBox;
+    if (targetBox) {
+        auto [sx, sy] = targetBox->GetSelectedSlotScreenPosition();
+        // Offset by -6 to match BoxItem's spriteOverscan centering
+        heldPokemonImage->SetX(sx - 6);
+        heldPokemonImage->SetY(sy - 6);
+    }
+
+    heldPokemonImage->SetVisible(true);
 }
 
 void StorageScreen::UpdateHelpFooter() {

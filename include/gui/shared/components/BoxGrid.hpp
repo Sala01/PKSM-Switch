@@ -110,6 +110,9 @@ public:
     // Get current selection
     size_t GetSelectedIndex() const { return selectedIndex; }
 
+    // Get the screen position of the currently selected slot
+    std::pair<pu::i32, pu::i32> GetSelectedSlotPosition() const;
+
     bool ShouldResignUpFocus() const { return IsInFirstRow(selectedIndex); }
     bool ShouldResignDownFocus() const { return IsInLastRow(selectedIndex); }
 };
