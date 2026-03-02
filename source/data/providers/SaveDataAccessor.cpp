@@ -449,10 +449,13 @@ pksm::saves::SaveData::Ref SaveDataAccessor::LoadSaveDataFromFile(
     const bool isSaveDevicePath = savePath.rfind("save:/", 0) == 0;
 
     if (isSaveDevicePath) {
-        LOG_DEBUG("Mounting save data for title ID: " + std::to_string(title->getTitleId()) + 
-                  " user ID: " + std::to_string(currentUserId.uid[1]) + 
+        LOG_DEBUG("Mounting save data for title ID: " + std::to_string(title->getTitleId()) +
+                  " user ID: " + std::to_string(currentUserId.uid[1]) +
                   " save path: " + savePath);
-        
+
+        // Ensure any previously mounted save device is cleanly unmounted first
+        fsdevUnmountDevice("save");
+
         // Mount save data for read-write access
         Result rc = fsdevMountSaveData("save", title->getTitleId(), currentUserId);
         if (R_FAILED(rc)) {
