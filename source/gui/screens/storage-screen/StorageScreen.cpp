@@ -611,8 +611,8 @@ void StorageScreen::UpdateHeldPokemonImage() {
     if (targetBox) {
         auto [sx, sy] = targetBox->GetSelectedSlotScreenPosition();
         // Offset by -6 to match BoxItem's spriteOverscan centering
-        heldPokemonImage->SetX(sx - 6);
-        heldPokemonImage->SetY(sy - 6);
+        heldPokemonImage->SetX(sx - 20);
+        heldPokemonImage->SetY(sy - 20);
     }
 
     heldPokemonImage->SetVisible(true);
