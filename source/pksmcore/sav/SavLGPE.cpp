@@ -385,7 +385,8 @@ namespace pksm
             {
                 trade(*pb7);
             }
-
+            // Box storage is PKX-encrypted per PKHeX convention
+            pb7->encrypt();
             std::ranges::copy(
                 pb7->rawData().subspan(0, PB7::PARTY_LENGTH), &data[boxOffset(box, slot)]);
         }
@@ -424,6 +425,7 @@ namespace pksm
             }
 
             auto pb7 = pk.partyClone();
+            pb7->encrypt();
             std::ranges::copy(pb7->rawData().subspan(0, PB7::PARTY_LENGTH), &data[off]);
             partyBoxSlot(slot, newSlot);
         }

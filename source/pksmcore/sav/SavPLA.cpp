@@ -310,7 +310,8 @@ namespace pksm
             {
                 trade(*pa8);
             }
-            // Box storage uses stored size (0x168)
+            // Box storage uses stored size (0x168), PKX-encrypted per PKHeX convention
+            pa8->encrypt();
             std::ranges::copy(pa8->rawData().subspan(0, PA8::BOX_LENGTH),
                 getBlock(Box)->decryptedData() + boxOffset(box, slot));
         }

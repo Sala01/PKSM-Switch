@@ -579,7 +579,8 @@ namespace pksm
             {
                 trade(*pa9);
             }
-            // Box storage uses party-length data
+            // Box storage is PKX-encrypted per PKHeX convention
+            pa9->encrypt();
             std::ranges::copy(pa9->rawData().subspan(0, PA9::PARTY_LENGTH),
                 getBlock(Box)->decryptedData() + boxOffset(box, slot));
         }

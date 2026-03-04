@@ -25,6 +25,7 @@
  */
 
 #include "sav/Sav8.hpp"
+#include "pkx/PA8.hpp"
 #include "pkx/PA9.hpp"
 #include "pkx/PK8.hpp"
 #include "pkx/PK9.hpp"
@@ -60,6 +61,10 @@ namespace pksm
         if (game == Game::ZA)
         {
             return PKX::getPKM<PA9>(nullptr, PA9::BOX_LENGTH);
+        }
+        if (game == Game::PLA)
+        {
+            return PKX::getPKM<PA8>(nullptr, PA8::BOX_LENGTH);
         }
         return PKX::getPKM<Generation::EIGHT>(nullptr, PK8::BOX_LENGTH);
     }
