@@ -121,8 +121,37 @@ StorageScreen::StorageScreen(
             return;
         }
 
+        summaryCloneSource = pk->clone();
+        summaryCloneProvider = provider;
+        summaryCloneBoxIndex = boxIndex;
+        summaryCloneSlotIndex = slotIndex;
+        summaryCloneFromBank = (activeBox == ActiveBox::Bank);
+        summaryCloneVisual = slotData;
+
         auto overlay = pksm::ui::PokemonSummaryOverlay::New(0, 0, GetWidth(), GetHeight());
         overlay->SetPokemon(std::move(pk));
+
+        auto cloneHintGlyph = pu::ui::elm::TextBlock::New(0, 0, pksm::ui::global::GetButtonGlyphString(pksm::ui::global::ButtonGlyph::X));
+        cloneHintGlyph->SetColor(pu::ui::Color(255, 255, 255, 255));
+        cloneHintGlyph->SetFont(pksm::ui::global::MakeSwitchButtonFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
+        auto cloneHintText = pu::ui::elm::TextBlock::New(0, 0, "Clone");
+        cloneHintText->SetColor(pu::ui::Color(255, 255, 255, 255));
+        cloneHintText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
+        static constexpr pu::i32 hintGap = 12;
+        const pu::i32 hintTotalW = cloneHintGlyph->GetWidth() + hintGap + cloneHintText->GetWidth();
+        const pu::i32 hintX = (GetWidth() - hintTotalW) / 2;
+        const pu::i32 hintY = (GetHeight() - std::max(cloneHintGlyph->GetHeight(), cloneHintText->GetHeight())) / 2 + 350;
+
+        cloneHintGlyph->SetX(hintX);
+        cloneHintGlyph->SetY(hintY);
+        cloneHintText->SetX(hintX + cloneHintGlyph->GetWidth() + hintGap);
+        cloneHintText->SetY(hintY);
+
+        overlay->Add(cloneHintGlyph);
+        overlay->Add(cloneHintText);
+
         this->onShowOverlay(overlay);
         isSummaryOverlayVisible = true;
 
@@ -285,9 +314,40 @@ StorageScreen::~StorageScreen() = default;
 
 void StorageScreen::OnInput(u64 down, u64 up, u64 held) {
     if (isSummaryOverlayVisible) {
+        if ((down & HidNpadButton_X) && !heldPokemon.has_value() && summaryCloneSource && summaryCloneProvider && summaryCloneBoxIndex >= 0 && summaryCloneSlotIndex >= 0) {
+            heldPokemon = HeldPokemon{
+                summaryCloneSource->clone(),
+                summaryCloneProvider,
+                summaryCloneBoxIndex,
+                summaryCloneSlotIndex,
+                summaryCloneFromBank,
+                summaryCloneVisual,
+                true
+            };
+            deferredWrites.clear();
+
+            onHideOverlay();
+            isSummaryOverlayVisible = false;
+            summaryCloneSource.reset();
+            summaryCloneProvider = nullptr;
+            summaryCloneBoxIndex = -1;
+            summaryCloneSlotIndex = -1;
+            summaryCloneFromBank = false;
+
+            SetActiveBox(activeBox);
+            UpdateHeldPokemonImage();
+            UpdateHelpFooter();
+            return;
+        }
+
         if (down & HidNpadButton_B) {
             onHideOverlay();
             isSummaryOverlayVisible = false;
+            summaryCloneSource.reset();
+            summaryCloneProvider = nullptr;
+            summaryCloneBoxIndex = -1;
+            summaryCloneSlotIndex = -1;
+            summaryCloneFromBank = false;
             SetActiveBox(activeBox);
         }
         return;
@@ -405,7 +465,7 @@ void StorageScreen::PickUp() {
 
     // Store held Pokemon with original source info and visually clear the source slot
     heldPokemon = HeldPokemon{
-        std::move(pk), provider, boxIndex, slotIndex, isBank, slotVisual
+        std::move(pk), provider, boxIndex, slotIndex, isBank, slotVisual, false
     };
     deferredWrites.clear();
     targetBox->SetPokemonData(boxIndex, slotIndex, pksm::ui::BoxPokemonData());
@@ -483,7 +543,7 @@ void StorageScreen::PlaceDown() {
                 }
             }
         }
-        if (!originalCovered) {
+        if (!originalCovered && !heldPokemon->isClone) {
             heldPokemon->originalProvider->ClearSlot(
                 saveData, heldPokemon->originalBox, heldPokemon->originalSlot);
         }

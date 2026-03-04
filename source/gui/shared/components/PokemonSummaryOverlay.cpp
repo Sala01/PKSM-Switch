@@ -64,7 +64,7 @@ static pu::ui::Color TypeColor(const pksm::Type t) {
 
 static std::string LocalizeMove(const pksm::Language lang, const pksm::Move mv) {
     if (mv == pksm::Move::None) {
-        return "--";
+        return "None";
     }
     const auto &s = i18n::move(lang, mv);
     if (s.empty()) {
