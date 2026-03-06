@@ -8,19 +8,19 @@ std::vector<pksm::titles::Title::Ref> createInitialTitles() {
     
     // Create titles with error handling - don't crash if icons don't exist
     try {
-        titles.push_back(pksm::titles::Title::New("Pokémon Yellow", "romfs:/gfx/mock/emulator/yellow_menu_icon.jpg", 0x00164A00));
+        titles.push_back(pksm::titles::Title::New("Pokémon Yellow", "romfs:/gfx/data/game_icons/firered_icon.jpg", 0x00164A00));
     } catch (...) {
         LOG_WARNING("Failed to create Yellow title");
     }
     
     try {
-        titles.push_back(pksm::titles::Title::New("Pokémon Crystal", "romfs:/gfx/mock/emulator/crystal_menu_icon.jpg", 0x00164B00));
+        titles.push_back(pksm::titles::Title::New("Pokémon Crystal", "romfs:/gfx/data/game_icons/firered_icon.jpg", 0x00164B00));
     } catch (...) {
         LOG_WARNING("Failed to create Crystal title");
     }
     
     try {
-        titles.push_back(pksm::titles::Title::New("Pokémon Emerald", "romfs:/gfx/mock/emulator/emerald_menu_icon.jpg", 0x00164C00));
+        titles.push_back(pksm::titles::Title::New("Pokémon Emerald", "romfs:/gfx/data/game_icons/firered_icon.jpg", 0x00164C00));
     } catch (...) {
         LOG_WARNING("Failed to create Emerald title");
     }

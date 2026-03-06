@@ -1,5 +1,6 @@
 #include "gui/screens/storage-screen/StorageScreen.hpp"
 
+#include <array>
 #include <ctime>
 
 #include "gui/screens/main-menu/sub-components/menu-grid/MenuButtonGrid.hpp"
@@ -357,6 +358,14 @@ void StorageScreen::OnInput(u64 down, u64 up, u64 held) {
         return;
     }
 
+    constexpr u64 swapMask = HidNpadButton_ZL | HidNpadButton_ZR;
+    if (((held & swapMask) == swapMask) && ((down & swapMask) != 0)) {
+        if (!heldPokemon.has_value() && deferredWrites.empty()) {
+            SwapCurrentBoxes();
+        }
+        return;
+    }
+
     static constexpr int ITEMS_PER_ROW = 6;
     bool shouldHandleBoxSwitch = false;
 
@@ -381,11 +390,93 @@ void StorageScreen::OnInput(u64 down, u64 up, u64 held) {
     buttonHandler.HandleInput(down, up, held);
 }
 
+void StorageScreen::SwapCurrentBoxes() {
+    if (!pokemonBankBox || !pokemonSaveBox || !bankBoxDataProvider || !boxDataProvider || !saveDataAccessor) {
+        return;
+    }
+
+    auto saveData = saveDataAccessor->getCurrentSaveData();
+    if (!saveData) {
+        return;
+    }
+
+    const int bankBoxIndex = pokemonBankBox->GetCurrentBox();
+    const int saveBoxIndex = pokemonSaveBox->GetCurrentBox();
+    if (bankBoxIndex < 0 || saveBoxIndex < 0) {
+        return;
+    }
+
+    static constexpr int SLOTS_PER_BOX = 30;
+
+    struct PreparedSlot {
+        std::unique_ptr<pksm::PKX> toSave;
+        std::unique_ptr<pksm::PKX> toBank;
+    };
+
+    std::array<PreparedSlot, SLOTS_PER_BOX> prepared;
+
+    for (int slot = 0; slot < SLOTS_PER_BOX; slot++) {
+        auto bankPk = bankBoxDataProvider->GetPokemon(saveData, bankBoxIndex, slot);
+        auto savePk = boxDataProvider->GetPokemon(saveData, saveBoxIndex, slot);
+
+        if (bankPk) {
+            auto converted = boxDataProvider->PrepareForWrite(saveData, *bankPk);
+            if (!converted) {
+                return;
+            }
+            prepared[slot].toSave = std::move(converted);
+        }
+
+        if (savePk) {
+            auto converted = bankBoxDataProvider->PrepareForWrite(saveData, *savePk);
+            if (!converted) {
+                return;
+            }
+            prepared[slot].toBank = std::move(converted);
+        }
+    }
+
+    for (int slot = 0; slot < SLOTS_PER_BOX; slot++) {
+        if (prepared[slot].toSave) {
+            if (!boxDataProvider->WritePokemon(saveData, saveBoxIndex, slot, *prepared[slot].toSave)) {
+                return;
+            }
+            pokemonSaveBox->SetPokemonData(saveBoxIndex, slot, PkxToVisual(*prepared[slot].toSave));
+        } else {
+            boxDataProvider->ClearSlot(saveData, saveBoxIndex, slot);
+            pokemonSaveBox->SetPokemonData(saveBoxIndex, slot, pksm::ui::BoxPokemonData());
+        }
+
+        if (prepared[slot].toBank) {
+            if (!bankBoxDataProvider->WritePokemon(saveData, bankBoxIndex, slot, *prepared[slot].toBank)) {
+                return;
+            }
+            pokemonBankBox->SetPokemonData(bankBoxIndex, slot, PkxToVisual(*prepared[slot].toBank));
+        } else {
+            bankBoxDataProvider->ClearSlot(saveData, bankBoxIndex, slot);
+            pokemonBankBox->SetPokemonData(bankBoxIndex, slot, pksm::ui::BoxPokemonData());
+        }
+    }
+
+    if (pokemonSaveBox && boxDataProvider) {
+        auto saveBoxData = boxDataProvider->GetBoxData(saveData, saveBoxIndex);
+        pokemonSaveBox->SetBoxData(saveBoxIndex, saveBoxData);
+    }
+    if (pokemonBankBox && bankBoxDataProvider) {
+        auto bankBoxData = bankBoxDataProvider->GetBoxData(saveData, bankBoxIndex);
+        pokemonBankBox->SetBoxData(bankBoxIndex, bankBoxData);
+    }
+
+    UpdateHeldPokemonImage();
+}
+
 std::vector<pksm::ui::HelpItem> StorageScreen::GetHelpOverlayItems() const {
     return {
-        {{{pksm::ui::global::ButtonGlyph::A}}, "Select Pokémon"},
+        {{{pksm::ui::global::ButtonGlyph::A}}, "Place / Swap Pokémon"},
         {{{pksm::ui::global::ButtonGlyph::B}}, "Back to Main Menu"},
         {{{pksm::ui::global::ButtonGlyph::DPad}, {pksm::ui::global::ButtonGlyph::AnalogStick}}, "Navigate Box"},
+        {{{pksm::ui::global::ButtonGlyph::X}}, "Summary"},
+        {{{pksm::ui::global::ButtonGlyph::ZL}, {pksm::ui::global::ButtonGlyph::ZR}}, "Swap Boxes"},
         {{{pksm::ui::global::ButtonGlyph::L}}, "Previous Box"},
         {{{pksm::ui::global::ButtonGlyph::R}}, "Next Box"},
         {{{pksm::ui::global::ButtonGlyph::Minus}}, "Close Help"}
@@ -687,7 +778,6 @@ void StorageScreen::UpdateHelpFooter() {
             {{{pksm::ui::global::ButtonGlyph::A}}, "Place / Swap"},
             {{{pksm::ui::global::ButtonGlyph::B}}, "Cancel"},
             {{{pksm::ui::global::ButtonGlyph::L}, {pksm::ui::global::ButtonGlyph::R}}, "Switch Box"},
-            {{{pksm::ui::global::ButtonGlyph::DPad}}, "Navigate Box"},
         };
     } else {
         helpItems = {
@@ -695,7 +785,7 @@ void StorageScreen::UpdateHelpFooter() {
             {{{pksm::ui::global::ButtonGlyph::B}}, "Back to Main Menu"},
             {{{pksm::ui::global::ButtonGlyph::X}}, "Summary"},
             {{{pksm::ui::global::ButtonGlyph::L}, {pksm::ui::global::ButtonGlyph::R}}, "Switch Box"},
-            {{{pksm::ui::global::ButtonGlyph::DPad}}, "Navigate Box"},
+            {{{pksm::ui::global::ButtonGlyph::ZL}, {pksm::ui::global::ButtonGlyph::ZR}}, "Swap Boxes"},
         };
     }
     helpFooter->SetHelpItems(helpItems);

@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 #include <pu/Plutonium>
 
 #include "data/providers/interfaces/IBoxDataProvider.hpp"
@@ -133,6 +134,7 @@ namespace pksm::layout
         void CancelPickUp();
         void UpdateHelpFooter();
         void UpdateHeldPokemonImage();
+        void SwapCurrentBoxes();
 
         // Override BaseLayout methods
         std::vector<pksm::ui::HelpItem> GetHelpOverlayItems() const override;
