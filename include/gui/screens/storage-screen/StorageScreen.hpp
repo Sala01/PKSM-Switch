@@ -103,6 +103,11 @@ namespace pksm::layout
         // Summary-overlay clone hint
         pu::ui::elm::TextBlock::Ref cloneHintText;
 
+        pksm::ui::PokemonSummaryOverlay::Ref summaryOverlay;
+
+        bool isReleaseConfirmVisible = false;
+        pu::ui::Overlay::Ref releaseConfirmOverlay;
+
         // Summary-overlay clone source context
         std::unique_ptr<pksm::PKX> summaryCloneSource;
         IBoxDataProvider::Ref summaryCloneProvider;

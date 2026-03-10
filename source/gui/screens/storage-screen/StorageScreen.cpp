@@ -131,6 +131,7 @@ StorageScreen::StorageScreen(
 
         auto overlay = pksm::ui::PokemonSummaryOverlay::New(0, 0, GetWidth(), GetHeight());
         overlay->SetPokemon(std::move(pk));
+        summaryOverlay = overlay;
 
         auto cloneHintGlyph = pu::ui::elm::TextBlock::New(0, 0, pksm::ui::global::GetButtonGlyphString(pksm::ui::global::ButtonGlyph::X));
         cloneHintGlyph->SetColor(pu::ui::Color(255, 255, 255, 255));
@@ -140,18 +141,33 @@ StorageScreen::StorageScreen(
         cloneHintText->SetColor(pu::ui::Color(255, 255, 255, 255));
         cloneHintText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
 
+        auto releaseHintGlyph = pu::ui::elm::TextBlock::New(0, 0, pksm::ui::global::GetButtonGlyphString(pksm::ui::global::ButtonGlyph::Y));
+        releaseHintGlyph->SetColor(pu::ui::Color(255, 255, 255, 255));
+        releaseHintGlyph->SetFont(pksm::ui::global::MakeSwitchButtonFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
+        auto releaseHintText = pu::ui::elm::TextBlock::New(0, 0, "Release");
+        releaseHintText->SetColor(pu::ui::Color(255, 255, 255, 255));
+        releaseHintText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
         static constexpr pu::i32 hintGap = 12;
         const pu::i32 hintTotalW = cloneHintGlyph->GetWidth() + hintGap + cloneHintText->GetWidth();
         const pu::i32 hintX = (GetWidth() - hintTotalW) / 2;
-        const pu::i32 hintY = (GetHeight() - std::max(cloneHintGlyph->GetHeight(), cloneHintText->GetHeight())) / 2 + 350;
+        const pu::i32 hintY = (GetHeight() - std::max(cloneHintGlyph->GetHeight(), cloneHintText->GetHeight())) / 2 + 300;
 
         cloneHintGlyph->SetX(hintX);
         cloneHintGlyph->SetY(hintY);
         cloneHintText->SetX(hintX + cloneHintGlyph->GetWidth() + hintGap);
         cloneHintText->SetY(hintY);
 
+        releaseHintGlyph->SetX(hintX);
+        releaseHintGlyph->SetY(hintY + 75);
+        releaseHintText->SetX(hintX + releaseHintGlyph->GetWidth() + hintGap);
+        releaseHintText->SetY(hintY + 75);
+
         overlay->Add(cloneHintGlyph);
         overlay->Add(cloneHintText);
+        overlay->Add(releaseHintGlyph);
+        overlay->Add(releaseHintText);
 
         this->onShowOverlay(overlay);
         isSummaryOverlayVisible = true;
@@ -314,6 +330,50 @@ void StorageScreen::LoadBoxData() {
 StorageScreen::~StorageScreen() = default;
 
 void StorageScreen::OnInput(u64 down, u64 up, u64 held) {
+    if (isReleaseConfirmVisible) {
+        if (down & HidNpadButton_B) {
+            onHideOverlay();
+            isReleaseConfirmVisible = false;
+            releaseConfirmOverlay = nullptr;
+
+            if (summaryOverlay) {
+                onShowOverlay(summaryOverlay);
+                isSummaryOverlayVisible = true;
+            }
+            return;
+        }
+
+        if ((down & HidNpadButton_A) && !heldPokemon.has_value() && summaryCloneProvider && summaryCloneBoxIndex >= 0 && summaryCloneSlotIndex >= 0) {
+            auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
+            summaryCloneProvider->ClearSlot(saveData, summaryCloneBoxIndex, summaryCloneSlotIndex);
+
+            pksm::ui::PokemonBox::Ref targetBox = summaryCloneFromBank ? pokemonBankBox : pokemonSaveBox;
+            if (targetBox) {
+                targetBox->SetPokemonData(summaryCloneBoxIndex, summaryCloneSlotIndex, pksm::ui::BoxPokemonData());
+            }
+
+            deferredWrites.clear();
+
+            onHideOverlay();
+            isReleaseConfirmVisible = false;
+            releaseConfirmOverlay = nullptr;
+            isSummaryOverlayVisible = false;
+            summaryOverlay = nullptr;
+
+            summaryCloneSource.reset();
+            summaryCloneProvider = nullptr;
+            summaryCloneBoxIndex = -1;
+            summaryCloneSlotIndex = -1;
+            summaryCloneFromBank = false;
+
+            SetActiveBox(activeBox);
+            UpdateHeldPokemonImage();
+            UpdateHelpFooter();
+            return;
+        }
+        return;
+    }
+
     if (isSummaryOverlayVisible) {
         if ((down & HidNpadButton_X) && !heldPokemon.has_value() && summaryCloneSource && summaryCloneProvider && summaryCloneBoxIndex >= 0 && summaryCloneSlotIndex >= 0) {
             heldPokemon = HeldPokemon{
@@ -341,6 +401,69 @@ void StorageScreen::OnInput(u64 down, u64 up, u64 held) {
             return;
         }
 
+        if ((down & HidNpadButton_Y) && !heldPokemon.has_value() && summaryCloneProvider && summaryCloneBoxIndex >= 0 && summaryCloneSlotIndex >= 0) {
+            onHideOverlay();
+            isSummaryOverlayVisible = false;
+
+            auto confirmOverlay = pu::ui::Overlay::New(0, 0, GetWidth(), GetHeight(), pu::ui::Color(0, 0, 0, 200));
+            confirmOverlay->SetRadius(0);
+            confirmOverlay->SetMaxFadeAlpha(200);
+            confirmOverlay->SetFadeAlphaVariation(18);
+
+            auto releaseConfirmText = pu::ui::elm::TextBlock::New(0, 0, "Are you sure you want to release this Pokemon?");
+            releaseConfirmText->SetColor(pu::ui::Color(255, 255, 255, 255));
+            releaseConfirmText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_TITLE));
+
+            auto aGlyph = pu::ui::elm::TextBlock::New(0, 0, pksm::ui::global::GetButtonGlyphString(pksm::ui::global::ButtonGlyph::A));
+            aGlyph->SetColor(pu::ui::Color(255, 255, 255, 255));
+            aGlyph->SetFont(pksm::ui::global::MakeSwitchButtonFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+            auto confirmText = pu::ui::elm::TextBlock::New(0, 0, "Confirm");
+            confirmText->SetColor(pu::ui::Color(255, 255, 255, 255));
+            confirmText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
+            auto bGlyph = pu::ui::elm::TextBlock::New(0, 0, pksm::ui::global::GetButtonGlyphString(pksm::ui::global::ButtonGlyph::B));
+            bGlyph->SetColor(pu::ui::Color(255, 255, 255, 255));
+            bGlyph->SetFont(pksm::ui::global::MakeSwitchButtonFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+            auto cancelText = pu::ui::elm::TextBlock::New(0, 0, "Cancel");
+            cancelText->SetColor(pu::ui::Color(255, 255, 255, 255));
+            cancelText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
+            const pu::i32 releaseConfirmX = (GetWidth() - releaseConfirmText->GetWidth()) / 2;
+            const pu::i32 releaseConfirmY = (GetHeight() - releaseConfirmText->GetHeight()) / 2;
+            releaseConfirmText->SetX(releaseConfirmX);
+            releaseConfirmText->SetY(releaseConfirmY);
+
+            static constexpr pu::i32 promptGap = 12;
+            static constexpr pu::i32 groupGap = 40;
+            const pu::i32 aGroupW = aGlyph->GetWidth() + promptGap + confirmText->GetWidth();
+            const pu::i32 bGroupW = bGlyph->GetWidth() + promptGap + cancelText->GetWidth();
+            const pu::i32 promptsW = aGroupW + groupGap + bGroupW;
+            const pu::i32 promptsX = (GetWidth() - promptsW) / 2;
+            const pu::i32 promptsY = releaseConfirmY + releaseConfirmText->GetHeight() + 40;
+
+            aGlyph->SetX(promptsX);
+            aGlyph->SetY(promptsY);
+            confirmText->SetX(promptsX + aGlyph->GetWidth() + promptGap);
+            confirmText->SetY(promptsY);
+
+            const pu::i32 bStartX = promptsX + aGroupW + groupGap;
+            bGlyph->SetX(bStartX);
+            bGlyph->SetY(promptsY);
+            cancelText->SetX(bStartX + bGlyph->GetWidth() + promptGap);
+            cancelText->SetY(promptsY);
+
+            confirmOverlay->Add(releaseConfirmText);
+            confirmOverlay->Add(aGlyph);
+            confirmOverlay->Add(confirmText);
+            confirmOverlay->Add(bGlyph);
+            confirmOverlay->Add(cancelText);
+
+            releaseConfirmOverlay = confirmOverlay;
+            onShowOverlay(confirmOverlay);
+            isReleaseConfirmVisible = true;
+            return;
+        }
+
         if (down & HidNpadButton_B) {
             onHideOverlay();
             isSummaryOverlayVisible = false;
@@ -349,6 +472,7 @@ void StorageScreen::OnInput(u64 down, u64 up, u64 held) {
             summaryCloneBoxIndex = -1;
             summaryCloneSlotIndex = -1;
             summaryCloneFromBank = false;
+            summaryOverlay = nullptr;
             SetActiveBox(activeBox);
         }
         return;
