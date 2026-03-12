@@ -26,6 +26,7 @@
 
 #include "sav/SavPLA.hpp"
 #include "pkx/PA8.hpp"
+#include "sav/Item.hpp"
 #include "utils/endian.hpp"
 #include "utils/i18n.hpp"
 #include "utils/utils.hpp"
@@ -179,19 +180,47 @@ namespace pksm
 
     void SavPLA::item(const Item& item, Pouch pouch, u16 slot)
     {
-        (void)item;
-        (void)pouch;
-        (void)slot;
+        auto write = item.bytes();
+        switch (pouch)
+        {
+            case Pouch::NormalItem:
+                std::copy(write.begin(), write.end(), getBlock(KItems)->decryptedData() + 4 * slot);
+                break;
+            case Pouch::KeyItem:
+                std::copy(write.begin(), write.end(),
+                    getBlock(KItemsKey)->decryptedData() + 4 * slot);
+                break;
+            case Pouch::PCItem:
+                std::copy(write.begin(), write.end(),
+                    getBlock(KItemsStored)->decryptedData() + 4 * slot);
+                break;
+            default:
+                break;
+        }
     }
 
-    std::unique_ptr<Item> SavPLA::item(Pouch, u16) const
+    std::unique_ptr<Item> SavPLA::item(Pouch pouch, u16 slot) const
     {
-        return nullptr;
+        switch (pouch)
+        {
+            case Pouch::NormalItem:
+                return std::make_unique<Item8>(getBlock(KItems)->decryptedData() + 4 * slot);
+            case Pouch::KeyItem:
+                return std::make_unique<Item8>(getBlock(KItemsKey)->decryptedData() + 4 * slot);
+            case Pouch::PCItem:
+                return std::make_unique<Item8>(getBlock(KItemsStored)->decryptedData() + 4 * slot);
+            default:
+                return std::make_unique<Item8>();
+        }
     }
 
     SmallVector<std::pair<Sav::Pouch, int>, 15> SavPLA::pouches(void) const
     {
-        return {};
+        return {
+            std::pair{Pouch::NormalItem, 675},
+            std::pair{Pouch::KeyItem,    100},
+            std::pair{Pouch::PCItem,     180},
+        };
     }
 
     SmallVector<std::pair<Sav::Pouch, std::span<const int>>, 15> SavPLA::validItems(void) const

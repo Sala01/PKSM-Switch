@@ -294,11 +294,13 @@ void BagScreen::BuildCategoriesForCurrentSave() {
         categoryLabels = {
             "Items",
             "Key Items",
+            "PC Items",
         };
 
         categoryPouches = {
             pksm::saves::BagPouch::NormalItem,
             pksm::saves::BagPouch::KeyItem,
+            pksm::saves::BagPouch::PCItem,
         };
     } else if (is_lgpe) {
         categoryLabels = {
