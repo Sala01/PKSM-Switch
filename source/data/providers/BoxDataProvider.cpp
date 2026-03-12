@@ -14,6 +14,7 @@
 #include "pksmcore/pkx/PK8.hpp"
 #include "pksmcore/pkx/PKX.hpp"
 #include "pksmcore/sav/Sav.hpp"
+#include "pksmcore/utils/VersionTables.hpp"
 #include "utils/Logger.hpp"
 
 namespace {
@@ -131,6 +132,27 @@ std::unique_ptr<pksm::PKX> ConvertPK8toPA8(const pksm::PK8& pk8) {
 
     pa8->refreshChecksum();
     return pa8;
+}
+
+// Clear moves not supported in the target game version, matching PKHeX ClearInvalidMoves().
+void ClearInvalidMoves(pksm::PKX& pk, pksm::GameVersion targetVersion) {
+    const auto& validMoves = pksm::VersionTables::availableMoves(targetVersion);
+    if (validMoves.empty()) return;
+
+    for (int i = 0; i < 4; i++)
+    {
+        if (pk.move(i) != pksm::Move::None && validMoves.count(pk.move(i)) == 0)
+        {
+            pk.move(i, pksm::Move::None);
+            pk.PP(i, 0);
+            pk.PPUp(i, 0);
+        }
+        if (pk.relearnMove(i) != pksm::Move::None && validMoves.count(pk.relearnMove(i)) == 0)
+        {
+            pk.relearnMove(i, pksm::Move::None);
+        }
+    }
+    pk.fixMoves();
 }
 
 } // namespace
@@ -472,16 +494,44 @@ std::unique_ptr<pksm::PKX> BoxDataProvider::PrepareForWrite(
     auto* sav = GetSavForSaveData(saveData);
     if (!sav) return nullptr;
 
+    // Reject transfer if the species doesn't exist in the target game
+    const auto& validSpecies = sav->availableSpecies();
+    if (!validSpecies.empty() && validSpecies.count(pkx.species()) == 0)
+    {
+        pksm::utils::Logger::Error("[BoxDataProvider] Transfer rejected: species " +
+            std::to_string(u16(pkx.species())) + " not available in target game");
+        return nullptr;
+    }
+
+    std::unique_ptr<pksm::PKX> result;
+
     // PLA special case: convertToG8() returns std::unique_ptr<PK8> (can't return PA8
     // due to the fixed return type), so we detect PLA target and post-convert PK8→PA8.
     if (sav->version() == pksm::GameVersion::PLA)
     {
-        if (pkx.extension() == ".pa8") return pkx.clone(); // Already native format
-        auto pk8 = pkx.convertToG8(*sav);
-        if (!pk8) return nullptr;
-        return ConvertPK8toPA8(*pk8);
+        if (pkx.extension() == ".pa8")
+        {
+            result = pkx.clone();
+        }
+        else
+        {
+            auto pk8 = pkx.convertToG8(*sav);
+            if (!pk8) return nullptr;
+            result = ConvertPK8toPA8(*pk8);
+        }
+    }
+    else
+    {
+        // All other saves: Sav::transfer() dispatches to the correct convertToGX()
+        result = sav->transfer(pkx);
     }
 
-    // All other saves: Sav::transfer() dispatches to the correct convertToGX()
-    return sav->transfer(pkx);
+    // Clear moves not supported in the target game (like PKHeX's ClearInvalidMoves)
+    if (result)
+    {
+        ClearInvalidMoves(*result, sav->version());
+        result->refreshChecksum();
+    }
+
+    return result;
 }
