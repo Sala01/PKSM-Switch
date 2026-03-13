@@ -3,9 +3,8 @@
 #include <memory>
 #include <functional>
 #include <pu/Plutonium>
-#include <chrono>
-#include <thread>
 #include <atomic>
+#include <string>
 
 #include "gui/shared/components/BaseLayout.hpp"
 #include "gui/shared/components/FocusableImage.hpp"
@@ -16,7 +15,6 @@ namespace pksm::layout
     class StartupScreen : public BaseLayout
     {
     private:
-        static constexpr u32 DISPLAY_DURATION_MS = 5000; // 5 seconds
         static constexpr u32 LOGO_SIZE = 256;
         static constexpr u32 LOGO_Y = 120;
         static constexpr u32 TEXT_Y = LOGO_Y + LOGO_SIZE + 60;
@@ -32,14 +30,8 @@ namespace pksm::layout
         pu::ui::elm::Rectangle::Ref loadingBarBackground;
         pu::ui::elm::Rectangle::Ref loadingBarFill;
 
-        // Timing
-        std::chrono::steady_clock::time_point startTime;
         std::function<void()> onTimeout;
         std::atomic<bool> completed;
-        std::thread timeoutThread;
-
-        // Background thread function
-        void TimeoutWorker();
 
     public:
         StartupScreen(
@@ -58,8 +50,10 @@ namespace pksm::layout
         // Input handling method (not override)
         void OnInput(u64 down, u64 up, u64 held);
 
-        // Update loading animation (called from main loop)
-        void UpdateLoadingAnimation();
+        // Progress screen controls
+        void SetProgress(float normalizedProgress);
+        void SetLoadingText(const std::string& text);
+        void Complete();
     };
 
 } // namespace pksm::layout

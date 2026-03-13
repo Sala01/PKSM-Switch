@@ -1,12 +1,15 @@
 #include "utils/PokemonSpriteManager.hpp"
 
 #include <fstream>
+#include <filesystem>
 #include <nlohmann/json.hpp>
 #include <sstream>
 
 #include "utils/Logger.hpp"
 
 namespace pksm::utils {
+
+namespace fs = std::filesystem;
 
 // Initialize static members
 bool PokemonSpriteManager::initialized = false;
@@ -158,7 +161,10 @@ bool PokemonSpriteManager::ParseJsonMetadata(const std::string& jsonPath) {
         file.close();
 
         std::string basePath = "romfs:/gfx/data/sprites/";
-        if (jsonPath.find("romfs:/gfx/data/") != std::string::npos) {
+        if (jsonPath.rfind("sdmc:/", 0) == 0) {
+            // default external path next to json under /switch/PKSM/assets
+            basePath = "sdmc:/switch/PKSM/assets/sprites/";
+        } else if (jsonPath.find("romfs:/gfx/data/") != std::string::npos) {
             basePath = "romfs:/gfx/data/sprites/";
         }
 
@@ -183,11 +189,18 @@ bool PokemonSpriteManager::ParseJsonMetadata(const std::string& jsonPath) {
             const std::string rawPath = entry["file_path"].get<std::string>();
             std::string filePath;
 
-            // allow romfs paths in JSON.
-            if (rawPath.rfind("romfs:/", 0) == 0) {
+            // Allow absolute romfs/sdmc paths in JSON.
+            if (rawPath.rfind("romfs:/", 0) == 0 || rawPath.rfind("sdmc:/", 0) == 0) {
                 filePath = rawPath;
             } else {
                 filePath = basePath + rawPath;
+            }
+
+            // If JSON came from SD and still points to romfs, remap by filename to SD sprites folder.
+            if (jsonPath.rfind("sdmc:/", 0) == 0 && filePath.rfind("romfs:/", 0) == 0) {
+                const auto pos = filePath.find_last_of('/');
+                const std::string filename = (pos == std::string::npos) ? filePath : filePath.substr(pos + 1);
+                filePath = basePath + filename;
             }
 
             // Generate key and store the sprite path
