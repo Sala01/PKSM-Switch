@@ -18,6 +18,7 @@ bool Logger::initialized = false;
 bool Logger::socket_initialized = false;
 bool Logger::console_initialized = false;
 int Logger::OUTPUT_TO_FILE = 1;
+int Logger::ADVANCED_LOGGING = 0;
 
 namespace {
 
@@ -30,6 +31,7 @@ std::vector<std::string> g_pending_lines;
 std::thread g_flush_thread;
 bool g_flush_thread_running = false;
 bool g_flush_thread_stop = false;
+bool g_log_file_cleared = false;
 
 void FlushPendingToFileLocked(std::vector<std::string>& out) {
     if (g_pending_lines.empty()) {
@@ -85,7 +87,12 @@ void EnsureFlushThreadStarted() {
 
     try {
         std::filesystem::create_directories(LOG_DIR);
-        std::ofstream out(LOG_FILE, std::ios::out | std::ios::app);
+        if (!g_log_file_cleared) {
+            std::ofstream out(LOG_FILE, std::ios::out | std::ios::trunc);
+            g_log_file_cleared = true;
+        } else {
+            std::ofstream out(LOG_FILE, std::ios::out | std::ios::app);
+        }
     } catch (...) {
         // ignore file logging failures
     }

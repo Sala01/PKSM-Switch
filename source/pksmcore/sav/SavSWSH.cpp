@@ -593,6 +593,8 @@ namespace pksm
                 trade(*pk8);
             }
 
+            // Box storage is PKX-encrypted per PKHeX convention
+            pk8->encrypt();
             std::ranges::copy(
                 pk8->rawData(), getBlock(Box)->decryptedData() + boxOffset(box, slot));
         }

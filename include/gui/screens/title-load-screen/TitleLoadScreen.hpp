@@ -79,6 +79,9 @@ private:
     std::function<void(pksm::titles::Title::Ref, pksm::saves::Save::Ref)> onSaveLoaded;
     std::function<void()> onExitRequested;
 
+    // Cached save list from last LoadSaves() call — avoids redundant mount/unmount cycles
+    std::vector<pksm::saves::Save::Ref> cachedSaves;
+
     // Event handlers
     void OnSaveSelected();
     void OnLoadButtonClick();

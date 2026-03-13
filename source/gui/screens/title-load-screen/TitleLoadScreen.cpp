@@ -215,16 +215,16 @@ void pksm::layout::TitleLoadScreen::LoadSaves() {
 
         // Update save list with current user
         LOG_DEBUG("Getting saves for current user");
-        auto saves = saveProvider->GetSavesForTitle(title, accountManager.GetCurrentAccount());
-        LOG_DEBUG("Found " + std::to_string(saves.size()) + " saves for title");
-        
+        cachedSaves = saveProvider->GetSavesForTitle(title, accountManager.GetCurrentAccount());
+        LOG_DEBUG("Found " + std::to_string(cachedSaves.size()) + " saves for title");
+
         // Log each save found
-        for (size_t i = 0; i < saves.size(); i++) {
-            LOG_DEBUG("Save " + std::to_string(i) + ": " + saves[i]->getName() + " at " + saves[i]->getPath());
+        for (size_t i = 0; i < cachedSaves.size(); i++) {
+            LOG_DEBUG("Save " + std::to_string(i) + ": " + cachedSaves[i]->getName() + " at " + cachedSaves[i]->getPath());
         }
-        
-        this->saveList->SetDataSource(saves);
-        LOG_DEBUG("Set save list data source with " + std::to_string(saves.size()) + " items");
+
+        this->saveList->SetDataSource(cachedSaves);
+        LOG_DEBUG("Set save list data source with " + std::to_string(cachedSaves.size()) + " items");
     } else {
         LOG_DEBUG("No title selected, cannot load saves");
     }
@@ -243,11 +243,8 @@ pksm::titles::Title::Ref pksm::layout::TitleLoadScreen::GetSelectedTitle() const
 
 pksm::saves::Save::Ref pksm::layout::TitleLoadScreen::GetSelectedSave() const {
     int selectedIndex = this->saveList->GetSelectedIndex();
-    if (selectedIndex >= 0) {
-        auto saves = saveProvider->GetSavesForTitle(GetSelectedTitle(), accountManager.GetCurrentAccount());
-        if (selectedIndex < static_cast<int>(saves.size())) {
-            return saves[selectedIndex];
-        }
+    if (selectedIndex >= 0 && selectedIndex < static_cast<int>(cachedSaves.size())) {
+        return cachedSaves[selectedIndex];
     }
     return nullptr;
 }

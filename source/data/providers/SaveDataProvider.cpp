@@ -301,10 +301,6 @@ std::vector<pksm::saves::Save::Ref> SaveDataProvider::GetSavesForTitle(
     for (const auto& [installedTitle, mainSaveFile] : installedTitles) {
         if (installedTitle->getTitleId() == title->getTitleId()) {
             LOG_DEBUG("GetSavesForTitle: Found matching title, main save file: " + (mainSaveFile.empty() ? "none" : mainSaveFile));
-            // Use fast check first to avoid unnecessary operations
-            if (!mainSaveFile.empty() && !FastSaveCheck(title, *currentUser, mainSaveFile)) {
-                LOG_DEBUG("GetSavesForTitle: Fast save check failed, falling back to full scan");
-            }
             auto saves = ScanSavesForTitle(title, *currentUser, mainSaveFile);
             LOG_DEBUG("GetSavesForTitle: ScanSavesForTitle returned " + std::to_string(saves.size()) + " saves");
             return saves;

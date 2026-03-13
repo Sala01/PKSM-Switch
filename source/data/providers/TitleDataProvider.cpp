@@ -1,9 +1,11 @@
 #include "TitleDataProvider.hpp"
+#include "data/providers/CustomTitleProvider.hpp"
 #include <fstream>
 #include <filesystem>
 #include <set>
 #include <vector>
 #include <cstring>
+
 #include <stdio.h>
 
 #include <switch.h>
@@ -95,8 +97,8 @@ void TitleDataProvider::GetInstalledApplicationIds(std::set<u64>& out_ids) const
 }
 
 TitleDataProvider::TitleDataProvider()
-    : mockCartridgeTitle(nullptr)
 {
+    customTitleProvider = CustomTitleProvider::New();
     try {
         std::ifstream f(JSON_PATH);
         if (f.is_open()) {
@@ -127,7 +129,6 @@ TitleDataProvider::TitleDataProvider()
         mockEmulatorTitles.push_back(std::make_shared<Title>("Pokémon Sun", "romfs:/gfx/mock/emulator/sun_menu_icon.jpg", 0x00180014));
         mockEmulatorTitles.push_back(std::make_shared<Title>("Pokémon Ultra Moon", "romfs:/gfx/mock/emulator/ultra_moon_menu_icon.jpg", 0x00180015));
     } catch (...) {
-        mockCartridgeTitle = nullptr;
         mockEmulatorTitles.clear();
     }
 }
@@ -179,7 +180,10 @@ std::vector<Title::Ref> TitleDataProvider::GetEmulatorTitles() const {
 }
 
 std::vector<Title::Ref> TitleDataProvider::GetCustomTitles() const {
-    return customTitles;
+    if (!customTitleProvider) {
+        return {};
+    }
+    return customTitleProvider->GetCustomTitles();
 }
 
 }

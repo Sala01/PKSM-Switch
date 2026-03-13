@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 #include <pu/Plutonium>
 
 #include "data/providers/interfaces/IBoxDataProvider.hpp"
@@ -62,28 +63,34 @@ namespace pksm::layout
         // Held Pokemon state for pick-up/place-down operations.
         // Uses deferred writes: no disk I/O until the user places on an empty slot.
         // Cancel restores all visuals with zero data loss.
-        struct HeldPokemon {
-            std::unique_ptr<pksm::PKX> pkx;         // Currently held PKX (changes on each carry-swap)
-            IBoxDataProvider::Ref originalProvider;   // Provider of the original pick-up source
-            int originalBox;                          // Original source box index
-            int originalSlot;                         // Original source slot index
-            bool originalFromBank;                    // Whether original source was bank side
-            pksm::ui::BoxPokemonData originalVisual;  // Visual data at original source (for cancel)
+        struct HeldPokemon
+        {
+            std::unique_ptr<pksm::PKX> pkx;          // Currently held PKX (changes on each carry-swap)
+            IBoxDataProvider::Ref originalProvider;  // Provider of the original pick-up source
+            int originalBox;                         // Original source box index
+            int originalSlot;                        // Original source slot index
+            bool originalFromBank;                   // Whether original source was bank side
+            pksm::ui::BoxPokemonData originalVisual; // Visual data at original source (for cancel)
+            bool isClone;                            // If true, this held Pokemon was cloned (source slot should not be modified)
         };
 
         // Pending writes accumulated during a carry-swap chain.
         // Each records what PKX to write at a slot and the previous visual for undo.
-        struct DeferredWrite {
+        struct DeferredWrite
+        {
             IBoxDataProvider::Ref provider;
             int boxIndex;
             int slotIndex;
             bool isBank;
-            std::unique_ptr<pksm::PKX> pkx;           // PKX to write at this slot on commit
-            pksm::ui::BoxPokemonData previousVisual;   // Visual before this write (for cancel)
+            std::unique_ptr<pksm::PKX> pkx;          // PKX to write at this slot on commit
+            pksm::ui::BoxPokemonData previousVisual; // Visual before this write (for cancel)
         };
 
         std::optional<HeldPokemon> heldPokemon;
         std::vector<DeferredWrite> deferredWrites;
+
+        // Floating sprite showing the held Pokemon over the cursor
+        pu::ui::elm::Image::Ref heldPokemonImage;
 
         // Layout constants
         static constexpr pu::i32 HEADER_TOP_MARGIN = 35;
@@ -92,6 +99,22 @@ namespace pksm::layout
         static constexpr pu::i32 SAVE_BOX_SIDE_MARGIN = 1000; // Margin from left edge (right side, moved further right)
         static constexpr pu::i32 BOX_GRID_TOP_MARGIN = 120;   // Margin from top
         static constexpr pu::i32 BOX_ITEM_SIZE = 124;         // Size of each box item
+
+        // Summary-overlay clone hint
+        pu::ui::elm::TextBlock::Ref cloneHintText;
+
+        pksm::ui::PokemonSummaryOverlay::Ref summaryOverlay;
+
+        bool isReleaseConfirmVisible = false;
+        pu::ui::Overlay::Ref releaseConfirmOverlay;
+
+        // Summary-overlay clone source context
+        std::unique_ptr<pksm::PKX> summaryCloneSource;
+        IBoxDataProvider::Ref summaryCloneProvider;
+        int summaryCloneBoxIndex = -1;
+        int summaryCloneSlotIndex = -1;
+        bool summaryCloneFromBank = false;
+        pksm::ui::BoxPokemonData summaryCloneVisual;
 
         // Focus and selection management
         pksm::input::FocusManager::Ref storageScreenFocusManager;
@@ -115,6 +138,8 @@ namespace pksm::layout
         void PlaceDown();
         void CancelPickUp();
         void UpdateHelpFooter();
+        void UpdateHeldPokemonImage();
+        void SwapCurrentBoxes();
 
         // Override BaseLayout methods
         std::vector<pksm::ui::HelpItem> GetHelpOverlayItems() const override;
