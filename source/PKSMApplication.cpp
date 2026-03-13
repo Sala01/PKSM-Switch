@@ -1,10 +1,13 @@
 #include "PKSMApplication.hpp"
 
+#include <array>
+#include <chrono>
 #include <format>
 #include <switch.h>
 
 #include "data/providers/BankBoxDataProvider.hpp"
 #include "data/providers/BoxDataProvider.hpp"
+#include "data/providers/PartyDataProvider.hpp"
 #include "data/providers/SaveDataAccessor.hpp"
 #include "data/providers/SaveDataProvider.hpp"
 #include "data/providers/TitleDataProvider.hpp"
@@ -12,9 +15,16 @@
 #include "gui/shared/UIConstants.hpp"
 #include "utils/Logger.hpp"
 #include "utils/NotificationManager.hpp"
+#include "utils/SpriteAssetDownloader.hpp"
 #include "utils/PokemonSpriteManager.hpp"
 
 namespace pksm {
+
+namespace {
+constexpr std::size_t kSpriteSyncBatchMaxDownloads = 32;
+constexpr std::uint32_t kSpriteSyncBatchMaxMilliseconds = 25000;
+constexpr std::size_t kSpriteSyncMaxNoProgressBatches = 5;
+}  // namespace
 
 pu::ui::render::RendererInitOptions PKSMApplication::CreateRendererOptions() {
     LOG_DEBUG("Creating renderer options...");
@@ -94,7 +104,8 @@ PKSMApplication::PKSMApplication(
     ISaveDataProvider::Ref saveProvider,
     ISaveDataAccessor::Ref saveDataAccessor,
     IBoxDataProvider::Ref boxDataProvider,
-    IBoxDataProvider::Ref bankBoxDataProvider
+    IBoxDataProvider::Ref bankBoxDataProvider,
+    IPartyDataProvider::Ref partyDataProvider
 )
   : pu::ui::Application(renderer),
     accountManager(std::move(accountManager)),
@@ -102,9 +113,13 @@ PKSMApplication::PKSMApplication(
     saveProvider(std::move(saveProvider)),
     saveDataAccessor(std::move(saveDataAccessor)),
     boxDataProvider(std::move(boxDataProvider)),
-    bankBoxDataProvider(std::move(bankBoxDataProvider)) {
+    bankBoxDataProvider(std::move(bankBoxDataProvider)),
+    partyDataProvider(std::move(partyDataProvider)) {
     // Add render callback to process account updates
-    AddRenderCallback([this]() { this->accountManager->ProcessPendingUpdates(); });
+    AddRenderCallback([this]() {
+        this->accountManager->ProcessPendingUpdates();
+        this->UpdateStartupSyncUI();
+    });
 
     // global notifications: render above layouts/overlays
     notificationCenter = pksm::ui::NotificationCenter::New(0, 0, 640);
@@ -113,6 +128,13 @@ PKSMApplication::PKSMApplication(
             notificationCenter->OnRender(drawer, notificationCenter->GetProcessedX(), notificationCenter->GetProcessedY());
         }
     });
+}
+
+PKSMApplication::~PKSMApplication() {
+    spriteSyncStopRequested = true;
+    if (spriteSyncWorker.joinable()) {
+        spriteSyncWorker.join();
+    }
 }
 
 PKSMApplication::Ref PKSMApplication::Initialize() {
@@ -138,8 +160,16 @@ PKSMApplication::Ref PKSMApplication::Initialize() {
         RegisterAdditionalFonts();
 
         // Initialize Pokemon sprite manager (optional)
-        if (!utils::PokemonSpriteManager::Initialize("romfs:/gfx/data/data.json")) {
-            LOG_WARNING("Failed to initialize sprite manager, continuing without sprites");
+        // Prefer external SD assets (3DS-like), fallback to romfs
+        if (!utils::PokemonSpriteManager::Initialize("sdmc:/switch/PKSM/assets/data.json")) {
+            if (!utils::PokemonSpriteManager::Initialize("romfs:/gfx/data/data.json")) {
+                LOG_WARNING("Failed to initialize sprite manager, continuing without sprites");
+                utils::NotificationManager::Push("Sprites", "Missing sprites pack: sdmc:/switch/PKSM/assets");
+            } else {
+                LOG_INFO("Sprite manager initialized from romfs fallback");
+            }
+        } else {
+            LOG_INFO("Sprite manager initialized from sdmc external assets");
         }
 
         auto recordingInitResult = appletInitializeGamePlayRecording();
@@ -167,6 +197,7 @@ PKSMApplication::Ref PKSMApplication::Initialize() {
         auto saveDataAccessorConcrete = std::make_shared<SaveDataAccessor>(accountManager->GetCurrentAccount());
         auto boxDataProviderConcrete = std::make_shared<BoxDataProvider>();
         auto bankBoxDataProviderConcrete = std::make_shared<BankBoxDataProvider>();
+        auto partyDataProviderConcrete = std::make_shared<PartyDataProvider>();
 
         // Cast to interface types expected by PKSMApplication
         ITitleDataProvider::Ref titleProvider = std::static_pointer_cast<ITitleDataProvider>(titleProviderConcrete);
@@ -174,6 +205,7 @@ PKSMApplication::Ref PKSMApplication::Initialize() {
         ISaveDataAccessor::Ref saveDataAccessor = std::static_pointer_cast<ISaveDataAccessor>(saveDataAccessorConcrete);
         IBoxDataProvider::Ref boxDataProvider = std::static_pointer_cast<IBoxDataProvider>(boxDataProviderConcrete);
         IBoxDataProvider::Ref bankBoxDataProvider = std::static_pointer_cast<IBoxDataProvider>(bankBoxDataProviderConcrete);
+        IPartyDataProvider::Ref partyDataProvider = std::static_pointer_cast<IPartyDataProvider>(partyDataProviderConcrete);
 
         LOG_MEMORY();  // Memory after data provider initialization
 
@@ -188,7 +220,8 @@ PKSMApplication::Ref PKSMApplication::Initialize() {
             saveProvider,
             saveDataAccessor,
             boxDataProvider,
-            bankBoxDataProvider
+            bankBoxDataProvider,
+            partyDataProvider
         );
 
         LOG_DEBUG("Preparing application...");
@@ -210,6 +243,179 @@ void PKSMApplication::ShowStartupScreen() {
     }
 }
 
+void PKSMApplication::StartSpriteSyncIfNeeded() {
+    if (spriteSyncRunning.load() || spriteSyncDone.load()) {
+        return;
+    }
+
+    spriteSyncUiCompleted = false;
+    spriteSyncProcessed = 0;
+    spriteSyncDownloaded = 0;
+    spriteSyncFailed = 0;
+    spriteSyncNoProgressBatches = 0;
+    spriteSyncStopRequested = false;
+
+    if (spriteSyncWorker.joinable()) {
+        spriteSyncWorker.join();
+    }
+
+    std::string countError;
+    const std::size_t missing = utils::SpriteAssetDownloader::CountMissingSprites(&countError);
+    spriteSyncTotal = missing;
+    spriteSyncRemaining = missing;
+
+    if (!countError.empty()) {
+        LOG_WARNING("Sprite asset precheck warning: " + countError);
+    }
+
+    if (missing == 0) {
+        LOG_INFO("Sprite assets already complete; skipping startup sync");
+        spriteSyncDone = true;
+        return;
+    }
+
+    LOG_INFO("Sprite sync starting: " + std::to_string(missing) + " sprites missing");
+    spriteSyncRunning = true;
+    spriteSyncDone = false;
+
+    spriteSyncWorker = std::thread([this]() {
+        try {
+            while (!spriteSyncStopRequested.load(std::memory_order_relaxed)) {
+                const std::size_t total = spriteSyncTotal.load(std::memory_order_relaxed);
+                const std::size_t processed = spriteSyncProcessed.load(std::memory_order_relaxed);
+
+                if (total == 0 || processed >= total) {
+                    break;
+                }
+
+                const std::size_t batchBaseProcessed = processed;
+                const std::size_t batchBaseDownloaded = spriteSyncDownloaded.load(std::memory_order_relaxed);
+                const std::size_t batchBaseFailed = spriteSyncFailed.load(std::memory_order_relaxed);
+
+                const auto sync = utils::SpriteAssetDownloader::SyncFromCdn(
+                    "https://cdn.sigkill.tech/",
+                    kSpriteSyncBatchMaxDownloads,
+                    kSpriteSyncBatchMaxMilliseconds,
+                    [this, total, batchBaseProcessed, batchBaseDownloaded, batchBaseFailed](const utils::SpriteAssetDownloader::ProgressInfo& info) {
+                        const std::size_t globalProcessed = std::min(total, batchBaseProcessed + info.processed);
+                        spriteSyncProcessed = globalProcessed;
+                        spriteSyncDownloaded = batchBaseDownloaded + info.downloaded;
+                        spriteSyncFailed = batchBaseFailed + info.failed;
+                    }
+                );
+
+                if (!sync.error.empty()) {
+                    LOG_WARNING("Sprite asset sync warning: " + sync.error);
+                }
+
+                const std::size_t downloadedTotal = spriteSyncDownloaded.load(std::memory_order_relaxed) + sync.downloadedSprites;
+                const std::size_t failedTotal = spriteSyncFailed.load(std::memory_order_relaxed) + sync.failedSprites;
+                spriteSyncDownloaded = downloadedTotal;
+                spriteSyncFailed = failedTotal;
+                spriteSyncRemaining = sync.remainingSprites;
+
+                const std::size_t newlyProcessed = sync.downloadedSprites + sync.failedSprites;
+                const std::size_t nextProcessed = std::min(total, processed + newlyProcessed);
+                spriteSyncProcessed = nextProcessed;
+
+                if (sync.downloadedSprites == 0) {
+                    spriteSyncNoProgressBatches = spriteSyncNoProgressBatches.load(std::memory_order_relaxed) + 1;
+                } else {
+                    spriteSyncNoProgressBatches = 0;
+                }
+
+                const bool noProgressLimitReached = spriteSyncNoProgressBatches.load(std::memory_order_relaxed) >= kSpriteSyncMaxNoProgressBatches;
+                const bool finished = (sync.remainingSprites == 0) || noProgressLimitReached || (nextProcessed >= total);
+
+                if (noProgressLimitReached && sync.remainingSprites > 0) {
+                    LOG_WARNING(
+                        "Sprite sync stopped after repeated zero-download batches; continuing startup with "
+                        + std::to_string(sync.remainingSprites) + " sprites still missing"
+                    );
+                }
+
+                if (finished) {
+                    break;
+                }
+            }
+        } catch (const std::exception& e) {
+            LOG_ERROR("Sprite sync worker exception: " + std::string(e.what()));
+        } catch (...) {
+            LOG_ERROR("Sprite sync worker unknown exception");
+        }
+
+        spriteSyncRunning = false;
+        spriteSyncDone = true;
+    });
+}
+
+void PKSMApplication::UpdateStartupSyncUI() {
+    if (!startupScreen || spriteSyncUiCompleted.load()) {
+        return;
+    }
+
+    const std::size_t total = spriteSyncTotal.load(std::memory_order_relaxed);
+    const std::size_t processed = spriteSyncProcessed.load(std::memory_order_relaxed);
+
+    if (spriteSyncRunning.load(std::memory_order_relaxed)) {
+        if (total == 0) {
+            spriteSyncRunning = false;
+            spriteSyncDone = true;
+            return;
+        }
+
+        static const std::array<const char*, 4> dots = {"", ".", "..", "..."};
+        const auto dotIndex = static_cast<std::size_t>(
+            (std::chrono::duration_cast<std::chrono::milliseconds>(
+                 std::chrono::steady_clock::now().time_since_epoch()
+             ).count() / 350) % static_cast<long long>(dots.size())
+        );
+
+        startupScreen->SetProgress(static_cast<float>(processed) / static_cast<float>(total));
+        startupScreen->SetLoadingText(
+            "Downloading sprites "
+            + std::to_string(processed)
+            + "/"
+            + std::to_string(total)
+            + dots[dotIndex]
+        );
+        return;
+    }
+
+    if (!spriteSyncDone.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    if (spriteSyncWorker.joinable()) {
+        spriteSyncWorker.join();
+    }
+
+    startupScreen->SetProgress(1.0f);
+
+    if (total == 0) {
+        startupScreen->SetLoadingText("Sprites ready");
+    } else {
+        const std::size_t downloaded = spriteSyncDownloaded.load(std::memory_order_relaxed);
+        const std::size_t failed = spriteSyncFailed.load(std::memory_order_relaxed);
+        const std::size_t remaining = spriteSyncRemaining.load(std::memory_order_relaxed);
+
+        startupScreen->SetLoadingText("Sprite sync complete");
+
+        std::string body = std::to_string(downloaded) + " downloaded";
+        if (failed > 0) {
+            body += ", " + std::to_string(failed) + " failed";
+        }
+        if (remaining > 0) {
+            body += ", " + std::to_string(remaining) + " remaining";
+        }
+        utils::NotificationManager::Push("Sprites", body);
+        LOG_INFO("Sprite assets sync complete: " + body);
+    }
+
+    spriteSyncUiCompleted = true;
+    startupScreen->Complete();
+}
+
 void PKSMApplication::ShowMainMenu() {
     LOG_DEBUG("Switching to main menu");
     this->LoadLayout(this->mainMenu);
@@ -218,6 +424,22 @@ void PKSMApplication::ShowMainMenu() {
 void PKSMApplication::ShowSettingsScreen() {
     LOG_DEBUG("Switching to settings screen");
     this->LoadLayout(this->settingsScreen);
+}
+
+void PKSMApplication::ShowEditorScreen() {
+    LOG_DEBUG("Switching to editor screen");
+
+    // Recover save context if it was lost
+    if ((!saveDataAccessor || !saveDataAccessor->getCurrentSaveData()) && saveDataAccessor && lastLoadedTitle && !lastLoadedSavePath.empty()) {
+        LOG_WARNING("Editor requested without current save; trying reload from cached selection");
+        if (!saveDataAccessor->loadSave(lastLoadedTitle, lastLoadedSavePath)) {
+            utils::NotificationManager::Push("Editor", "No save loaded. Please load a save first.");
+            this->ShowTitleLoadScreen();
+            return;
+        }
+    }
+
+    this->LoadLayout(this->editorScreen);
 }
 
 void PKSMApplication::ShowTitleLoadScreen() {
@@ -257,6 +479,10 @@ void PKSMApplication::OnSaveSelected(pksm::titles::Title::Ref title, pksm::saves
 
         utils::NotificationManager::Push("Save Loaded", save->getName() + " Loaded successfully.  (" + title->getName() + ")");
 
+        // Cache last loaded selection for lazy recovery in other screens
+        this->lastLoadedTitle = title;
+        this->lastLoadedSavePath = save->getPath();
+
         // Now that the save is loaded, show the main menu
         this->ShowMainMenu();
     } else {
@@ -290,7 +516,7 @@ void PKSMApplication::OnLoad() {
         LOG_DEBUG("Creating navigation callbacks...");
         std::map<pksm::ui::MenuButtonType, std::function<void()>> navigationCallbacks = {
             {pksm::ui::MenuButtonType::Storage, [this]() { this->ShowStorageScreen(); }},
-            {pksm::ui::MenuButtonType::Editor, [this]() { LOG_DEBUG("Editor button pressed (not implemented)"); }},
+            {pksm::ui::MenuButtonType::Editor, [this]() { this->ShowEditorScreen(); }},
             {pksm::ui::MenuButtonType::Events, [this]() { LOG_DEBUG("Events button pressed (not implemented)"); }},
             {pksm::ui::MenuButtonType::Bag, [this]() { this->ShowBagScreen(); }},
             {pksm::ui::MenuButtonType::Scripts, [this]() { LOG_DEBUG("Scripts button pressed (not implemented)"); }},
@@ -303,6 +529,8 @@ void PKSMApplication::OnLoad() {
             // When startup screen completes, show title load screen
             this->ShowTitleLoadScreen();
         });
+        startupScreen->SetProgress(0.0f);
+        startupScreen->SetLoadingText("Checking sprites...");
 
         // Create main menu
         LOG_DEBUG("Creating main menu...");
@@ -312,6 +540,7 @@ void PKSMApplication::OnLoad() {
             [this]() { this->EndOverlay(); },
             saveDataAccessor,  // Pass the save data accessor to the main menu
             boxDataProvider,  // Allow main menu to flush/discard save box changes
+            partyDataProvider,  // Allow main menu to flush/discard party changes
             bankBoxDataProvider,  // Allow main menu to flush/discard bank changes
             navigationCallbacks  // Pass navigation callbacks to the main menu
         );
@@ -344,6 +573,17 @@ void PKSMApplication::OnLoad() {
             [this]() { this->EndOverlay(); }
         );
 
+        // Create editor screen
+        LOG_DEBUG("Creating editor screen...");
+        editorScreen = pksm::layout::EditorScreen::New(
+            [this]() { this->ShowMainMenu(); },
+            [this](pu::ui::Overlay::Ref overlay) { this->StartOverlay(overlay); },
+            [this]() { this->EndOverlay(); },
+            saveDataAccessor,
+            boxDataProvider,
+            partyDataProvider
+        );
+
         // Register for save data changes in both MainMenu and StorageScreen
         LOG_DEBUG("Setting up save data change callbacks...");
         saveDataAccessor->setOnSaveDataChanged([this](pksm::saves::SaveData::Ref saveData) {
@@ -364,11 +604,18 @@ void PKSMApplication::OnLoad() {
             if (bagScreen) {
                 bagScreen->RefreshCategories();
             }
+
+            // Refresh editor screen with new save data
+            if (editorScreen) {
+                LOG_DEBUG("Refreshing EditorScreen with new save data");
+                editorScreen->LoadData();
+            }
         });
 
         // Start with startup screen
         LOG_DEBUG("Loading initial screen...");
         this->ShowStartupScreen();
+        this->StartSpriteSyncIfNeeded();
 
         LOG_DEBUG("Application loaded successfully");
     } catch (const std::exception& e) {

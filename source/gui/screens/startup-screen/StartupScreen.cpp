@@ -1,6 +1,5 @@
 #include "gui/screens/startup-screen/StartupScreen.hpp"
 #include <algorithm>
-#include <thread>
 #include "gui/shared/UIConstants.hpp"
 
 namespace pksm::layout {
@@ -60,31 +59,9 @@ StartupScreen::StartupScreen(
     this->SetOnInput(
         std::bind(&StartupScreen::OnInput, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)
     );
-
-    // start the timer and background thread
-    startTime = std::chrono::steady_clock::now();
-    timeoutThread = std::thread(&StartupScreen::TimeoutWorker, this);
 }
 
 StartupScreen::~StartupScreen() {
-    // Ensure the thread is properly joined
-    if (timeoutThread.joinable()) {
-        completed = true;  // Signal thread to exit
-        timeoutThread.join();
-    }
-}
-
-void StartupScreen::TimeoutWorker() {
-    // sleep for the display duration
-    std::this_thread::sleep_for(std::chrono::milliseconds(DISPLAY_DURATION_MS));
-    
-    // check if we haven't already completed
-    if (!completed.exchange(true)) {
-        // call the timeout callback on the main thread
-        if (onTimeout) {
-            onTimeout();
-        }
-    }
 }
 
 void StartupScreen::OnHelpOverlayShown() {
@@ -106,25 +83,24 @@ void StartupScreen::OnHelpOverlayHidden() {
 }
 
 void StartupScreen::OnInput(u64 down, u64 up, u64 held) {
-    UpdateLoadingAnimation();
-    
-    // allow user to skip the startup screen by pressing A
-    if (down & HidNpadButton_A && !completed.exchange(true)) {
-        if (onTimeout) {
-            onTimeout();
-        }
-    }
+    (void)down;
+    (void)up;
+    (void)held;
 }
 
-void StartupScreen::UpdateLoadingAnimation() {
-    if (completed) return;
+void StartupScreen::SetProgress(float normalizedProgress) {
+    const float clamped = std::clamp(normalizedProgress, 0.0f, 1.0f);
+    loadingBarFill->SetWidth(static_cast<u32>(LOADING_BAR_WIDTH * clamped));
+}
 
-    auto currentTime = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count();
-    
-    // update loading bar animation
-    float progress = std::min(static_cast<float>(elapsed) / DISPLAY_DURATION_MS, 1.0f);
-    loadingBarFill->SetWidth(static_cast<u32>(LOADING_BAR_WIDTH * progress));
+void StartupScreen::SetLoadingText(const std::string& text) {
+    loadingText->SetText(text);
+}
+
+void StartupScreen::Complete() {
+    if (!completed.exchange(true) && onTimeout) {
+        onTimeout();
+    }
 }
 
 }  // namespace pksm::layout

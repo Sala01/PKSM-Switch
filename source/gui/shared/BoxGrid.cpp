@@ -1,5 +1,7 @@
 #include "gui/shared/components/BoxGrid.hpp"
 
+#include <limits>
+
 #include "gui/shared/UIConstants.hpp"
 #include "utils/Logger.hpp"
 
@@ -131,6 +133,11 @@ void pksm::ui::BoxGrid::UpdateGridFromBoxData() {
     }
     items.clear();
     container->Clear();
+
+    // Reset the selection index so that the SetSelectedIndex(0) call at the
+    // end of this function always passes the (selectedIndex != index) guard,
+    // even when the grid is being repopulated while already at slot 0.
+    selectedIndex = std::numeric_limits<size_t>::max();
 
     // Create box items for the current box
     size_t numSlots = currentBoxData.size();

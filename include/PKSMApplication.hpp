@@ -1,12 +1,16 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
+#include <thread>
 #include <pu/Plutonium>
 #include <switch.h>
 
 #include "data/AccountManager.hpp"
 #include "data/providers/interfaces/IBoxDataProvider.hpp"
+#include "data/providers/interfaces/IPartyDataProvider.hpp"
 #include "gui/screens/bag-screen/BagScreen.hpp"
+#include "gui/screens/editor-screen/EditorScreen.hpp"
 #include "gui/screens/main-menu/MainMenu.hpp"
 #include "gui/screens/settings-screen/SettingsScreen.hpp"
 #include "gui/screens/startup-screen/StartupScreen.hpp"
@@ -24,6 +28,7 @@ namespace pksm
         pksm::layout::BagScreen::Ref bagScreen;
         pksm::layout::StartupScreen::Ref startupScreen;
         pksm::layout::MainMenu::Ref mainMenu;
+        pksm::layout::EditorScreen::Ref editorScreen;
         pksm::layout::SettingsScreen::Ref settingsScreen;
         pksm::layout::TitleLoadScreen::Ref titleLoadScreen;
         pksm::layout::StorageScreen::Ref storageScreen;
@@ -35,6 +40,22 @@ namespace pksm
         ISaveDataAccessor::Ref saveDataAccessor;
         IBoxDataProvider::Ref boxDataProvider;
         IBoxDataProvider::Ref bankBoxDataProvider;
+        IPartyDataProvider::Ref partyDataProvider;
+        pksm::titles::Title::Ref lastLoadedTitle;
+        std::string lastLoadedSavePath;
+
+        // Startup sprite sync state
+        std::atomic<bool> spriteSyncRunning{false};
+        std::atomic<bool> spriteSyncDone{false};
+        std::atomic<bool> spriteSyncUiCompleted{false};
+        std::atomic<std::size_t> spriteSyncTotal{0};
+        std::atomic<std::size_t> spriteSyncProcessed{0};
+        std::atomic<std::size_t> spriteSyncDownloaded{0};
+        std::atomic<std::size_t> spriteSyncFailed{0};
+        std::atomic<std::size_t> spriteSyncRemaining{0};
+        std::atomic<std::size_t> spriteSyncNoProgressBatches{0};
+        std::atomic<bool> spriteSyncStopRequested{false};
+        std::thread spriteSyncWorker;
 
         // global toast notifications (drawn above everything)
         pksm::ui::NotificationCenter::Ref notificationCenter;
@@ -55,12 +76,17 @@ namespace pksm
         void ShowBagScreen();
         void ShowStartupScreen();
         void ShowMainMenu();
+        void ShowEditorScreen();
         void ShowSettingsScreen();
         void ShowTitleLoadScreen();
         void ShowStorageScreen();
 
         // Save handling
         void OnSaveSelected(pksm::titles::Title::Ref title, pksm::saves::Save::Ref save);
+
+        // Startup sprite sync workflow
+        void StartSpriteSyncIfNeeded();
+        void UpdateStartupSyncUI();
 
     public:
         PKSMApplication(
@@ -70,7 +96,9 @@ namespace pksm
             ISaveDataProvider::Ref saveProvider,
             ISaveDataAccessor::Ref saveDataAccessor,
             IBoxDataProvider::Ref boxDataProvider,
-            IBoxDataProvider::Ref bankBoxDataProvider);
+            IBoxDataProvider::Ref bankBoxDataProvider,
+            IPartyDataProvider::Ref partyDataProvider);
+        ~PKSMApplication();
         PU_SMART_CTOR(PKSMApplication)
 
         // Initialize the application with all necessary configuration

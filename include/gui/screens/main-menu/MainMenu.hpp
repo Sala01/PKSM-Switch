@@ -5,6 +5,7 @@
 #include <pu/Plutonium>
 
 #include "data/providers/interfaces/IBoxDataProvider.hpp"
+#include "data/providers/interfaces/IPartyDataProvider.hpp"
 #include "data/providers/interfaces/ISaveDataAccessor.hpp"
 #include "gui/screens/main-menu/sub-components/TrainerInfo.hpp"
 #include "gui/screens/main-menu/sub-components/menu-grid/MenuButtonGrid.hpp"
@@ -29,6 +30,7 @@ namespace pksm::layout
             std::function<void()> onHideOverlay,
             ISaveDataAccessor::Ref saveDataAccessor,
             IBoxDataProvider::Ref boxDataProvider,
+            IPartyDataProvider::Ref partyDataProvider,
             IBoxDataProvider::Ref bankBoxDataProvider,
             std::map<pksm::ui::MenuButtonType, std::function<void()>> navigationCallbacks);
         PU_SMART_CTOR(MainMenu)
@@ -45,6 +47,7 @@ namespace pksm::layout
         pksm::ui::MenuButtonGrid::Ref menuGrid;
         ISaveDataAccessor::Ref saveDataAccessor;
         IBoxDataProvider::Ref boxDataProvider;
+        IPartyDataProvider::Ref partyDataProvider;
         IBoxDataProvider::Ref bankBoxDataProvider;
         std::map<pksm::ui::MenuButtonType, std::function<void()>> navigationCallbacks;
         pksm::input::ButtonInputHandler buttonHandler;

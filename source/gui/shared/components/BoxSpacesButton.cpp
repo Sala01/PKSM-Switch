@@ -107,6 +107,10 @@ void BoxSpacesButton::SetY(pu::i32 newY) {
 }
 
 void BoxSpacesButton::OnRender(pu::ui::render::Renderer::Ref& drawer, const pu::i32 x, const pu::i32 y) {
+    if (!this->IsVisible()) {
+        return;
+    }
+
     // Render the pill-shaped container
     drawer->RenderRoundedRectangleFill(containerColor, x, y, width, height, CORNER_RADIUS);
 
@@ -127,6 +131,10 @@ void BoxSpacesButton::OnInput(
     const u64 keys_held,
     const pu::ui::TouchPoint touch_pos
 ) {
+    if (!this->IsVisible()) {
+        return;
+    }
+
     touchHandler.HandleInput(touch_pos, GetX(), GetY(), GetWidth(), GetHeight());
 }
 

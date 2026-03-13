@@ -12,6 +12,7 @@ MainMenu::MainMenu(
     std::function<void()> onHideOverlay,
     ISaveDataAccessor::Ref saveDataAccessor,
     IBoxDataProvider::Ref boxDataProvider,
+    IPartyDataProvider::Ref partyDataProvider,
     IBoxDataProvider::Ref bankBoxDataProvider,
     std::map<pksm::ui::MenuButtonType, std::function<void()>> navigationCallbacks
 )
@@ -19,6 +20,7 @@ MainMenu::MainMenu(
     onBack(onBack),
     saveDataAccessor(saveDataAccessor),
     boxDataProvider(boxDataProvider),
+    partyDataProvider(partyDataProvider),
     bankBoxDataProvider(bankBoxDataProvider),
     navigationCallbacks(navigationCallbacks),
     buttonHandler(),
@@ -107,8 +109,9 @@ MainMenu::MainMenu(
         [this]() {
             const bool saveDirty = (this->saveDataAccessor && this->saveDataAccessor->hasUnsavedChanges());
             const bool boxDirty = (this->boxDataProvider && this->boxDataProvider->HasPendingWrites());
+            const bool partyDirty = (this->partyDataProvider && this->partyDataProvider->HasPendingWrites());
             const bool bankDirty = (this->bankBoxDataProvider && this->bankBoxDataProvider->HasPendingWrites());
-            if (saveDirty || boxDirty || bankDirty) {
+            if (saveDirty || boxDirty || partyDirty || bankDirty) {
                 if (!this->isExitConfirmVisible) {
                     this->exitConfirmSelectedIndex = 0;
                     this->exitConfirmOverlay = pksm::ui::ConfirmExitOverlay::New(0, 0, this->GetWidth(), this->GetHeight());
@@ -132,9 +135,10 @@ MainMenu::MainMenu(
         [this]() {
             const bool bankDirty = (this->bankBoxDataProvider && this->bankBoxDataProvider->HasPendingWrites());
             const bool boxDirty = (this->boxDataProvider && this->boxDataProvider->HasPendingWrites());
+            const bool partyDirty = (this->partyDataProvider && this->partyDataProvider->HasPendingWrites());
             const bool saveDirty = (this->saveDataAccessor && this->saveDataAccessor->hasUnsavedChanges());
 
-            if (!saveDirty && !boxDirty && !bankDirty) {
+            if (!saveDirty && !boxDirty && !partyDirty && !bankDirty) {
                 pksm::utils::NotificationManager::Push("Save", "No changes to save.");
                 return;
             }
@@ -164,6 +168,13 @@ MainMenu::MainMenu(
             if (boxDirty) {
                 if (!this->boxDataProvider->FlushPendingWrites()) {
                     pksm::utils::NotificationManager::Push("Save Failed", "Failed to save box changes.");
+                    return;
+                }
+            }
+
+            if (partyDirty) {
+                if (!this->partyDataProvider->FlushPendingWrites()) {
+                    pksm::utils::NotificationManager::Push("Save Failed", "Failed to save party changes.");
                     return;
                 }
             }
@@ -254,6 +265,13 @@ void MainMenu::OnInput(u64 down, u64 up, u64 held) {
                 }
             }
 
+            if (this->partyDataProvider && this->partyDataProvider->HasPendingWrites()) {
+                if (!this->partyDataProvider->FlushPendingWrites()) {
+                    pksm::utils::NotificationManager::Push("Save Failed", "Failed to save party changes.");
+                    return;
+                }
+            }
+
             if (this->bankBoxDataProvider && this->bankBoxDataProvider->HasPendingWrites()) {
                 if (!this->bankBoxDataProvider->FlushPendingWrites()) {
                     pksm::utils::NotificationManager::Push("Save Failed", "Failed to save bank changes.");
@@ -310,6 +328,9 @@ void MainMenu::OnInput(u64 down, u64 up, u64 held) {
             if (exitConfirmSelectedIndex == 1) {
                 if (this->boxDataProvider && this->boxDataProvider->HasPendingWrites()) {
                     this->boxDataProvider->DiscardPendingWrites();
+                }
+                if (this->partyDataProvider && this->partyDataProvider->HasPendingWrites()) {
+                    this->partyDataProvider->DiscardPendingWrites();
                 }
                 if (this->bankBoxDataProvider && this->bankBoxDataProvider->HasPendingWrites()) {
                     this->bankBoxDataProvider->DiscardPendingWrites();
