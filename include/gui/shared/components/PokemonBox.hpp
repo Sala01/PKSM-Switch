@@ -21,8 +21,8 @@ private:
     static constexpr pu::i32 FRAME_PADDING = 10;  // Padding inside the frame
     static constexpr pu::i32 CORNER_RADIUS = 20;  // Corner radius for the rounded rectangle frame
     static constexpr pu::i32 BORDER_THICKNESS = 2;  // Border thickness
-    static constexpr pu::i32 TOP_FRAME_HEIGHT = 120;  // Extra height for the top part of the frame
-    static constexpr pu::i32 BOTTOM_FRAME_HEIGHT = 80;  // Extra height for the bottom part of the frame
+    static constexpr pu::i32 DEFAULT_TOP_FRAME_HEIGHT = 120;  // Extra height for the top part of the frame
+    static constexpr pu::i32 DEFAULT_BOTTOM_FRAME_HEIGHT = 80;  // Extra height for the bottom part of the frame
     static constexpr pu::i32 NAVIGATION_SIDE_MARGIN = 25;  // Margin from frame edge to navigation elements
     static constexpr pu::i32 BOX_SPACES_BOTTOM_MARGIN = 15;  // Margin from bottom of frame to BoxSpaces button
     static constexpr pu::i32 BOX_COUNTER_RIGHT_MARGIN = 25;  // Right margin for box counter
@@ -37,6 +37,8 @@ private:
     // Position and size
     pu::i32 x;
     pu::i32 y;
+    pu::i32 topFrameHeight;
+    pu::i32 bottomFrameHeight;
 
     // Colors
     pu::ui::Color frameColor;  // Color of the frame
@@ -46,6 +48,8 @@ private:
     bool focused = false;
     bool selected = false;
     bool disabled = false;
+    bool navigationControlsVisible = true;
+    bool footerControlsVisible = true;
 
     // Data storage
     std::vector<BoxData> boxes;  // All box data
@@ -107,7 +111,9 @@ public:
         input::SelectionManager::Ref parentSelectionManager,
         const std::map<ShakeDirection, bool> shouldConsiderSideOutOfBounds = {},
         const pu::i32 numberOfRows = DEFAULT_NUMBER_OF_ROWS,
-        const pu::i32 itemsPerRow = DEFAULT_ITEMS_PER_ROW
+        const pu::i32 itemsPerRow = DEFAULT_ITEMS_PER_ROW,
+        const pu::i32 topFrameHeight = DEFAULT_TOP_FRAME_HEIGHT,
+        const pu::i32 bottomFrameHeight = DEFAULT_BOTTOM_FRAME_HEIGHT
     );
     ~PokemonBox();
     PU_SMART_CTOR(PokemonBox)
@@ -135,6 +141,10 @@ public:
     // Box management methods
     void SetBoxCount(size_t count);
     void SetCurrentBox(int boxIndex);
+    // Force a grid refresh + selection-changed callback without the
+    // "same box" guard in SetCurrentBox.  Use after SetBoxData() when
+    // currentBox is already 0 (e.g. team panel on every LoadData call).
+    void ForceRefreshCurrentBox();
     int GetCurrentBox() const { return currentBox; }
 
     // Pokemon data management
@@ -157,6 +167,10 @@ public:
 
     // Appearance configuration
     void SetColors(const pu::ui::Color& frameColor, const pu::ui::Color& borderColor);
+
+    // Optional chrome controls (used by Editor team panel)
+    void SetNavigationControlsVisible(bool visible);
+    void SetFooterControlsVisible(bool visible);
 };
 
 }  // namespace pksm::ui
