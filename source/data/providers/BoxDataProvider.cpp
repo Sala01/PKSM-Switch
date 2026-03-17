@@ -21,7 +21,8 @@ namespace {
 
 std::unique_ptr<pksm::Sav> LoadSavFromPath(const std::string &save_name) {
     const bool isSaveDevicePath = save_name.rfind("save:/", 0) == 0;
-    const std::string savePath = isSaveDevicePath ? save_name : (std::string("save:/") + save_name);
+    const bool isAbsoluteDevicePath = (save_name.find(":/") != std::string::npos);
+    const std::string savePath = (isSaveDevicePath || isAbsoluteDevicePath) ? save_name : (std::string("save:/") + save_name);
 
     if (!std::filesystem::exists(savePath)) {
         throw std::runtime_error("Save file does not exist: " + savePath);

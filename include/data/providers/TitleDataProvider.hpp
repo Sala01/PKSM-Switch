@@ -34,7 +34,7 @@ namespace pksm::titles
 
         std::shared_ptr<CustomTitleProvider> customTitleProvider;
 
-        std::vector<Title::Ref> mockEmulatorTitles;
+        std::vector<Title::Ref> emulatorTitles;
     };
 
 } // namespace pksm::titles

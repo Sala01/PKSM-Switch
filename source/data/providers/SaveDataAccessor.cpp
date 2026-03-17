@@ -218,7 +218,8 @@ bool SaveDataAccessor::loadSave(const pksm::titles::Title::Ref title, const std:
     hasChanges = false;
     lastError.clear();
     const bool isSaveDevicePath = saveName.rfind("save:/", 0) == 0;
-    currentSavePath = isSaveDevicePath ? saveName : (std::string("save:/") + saveName);
+    const bool isAbsoluteDevicePath = (saveName.find(":/") != std::string::npos);
+    currentSavePath = (isSaveDevicePath || isAbsoluteDevicePath) ? saveName : (std::string("save:/") + saveName);
 
     if (onSaveDataChanged) {
         onSaveDataChanged(currentSave);
@@ -238,8 +239,9 @@ bool SaveDataAccessor::saveChanges() {
 
     const auto savePath = !currentSavePath.empty() ? currentSavePath : currentSave->getName();
     const bool isSaveDevicePath = savePath.rfind("save:", 0) == 0;
-    if (!isSaveDevicePath) {
-        lastError = "Refusing to write save changes to a non-save device path: " + savePath;
+    const bool isAbsoluteDevicePath = (savePath.find(":/") != std::string::npos);
+    if (!isSaveDevicePath && !isAbsoluteDevicePath) {
+        lastError = "Refusing to write save changes to a non-save and non-absolute path: " + savePath;
         LOG_ERROR(lastError);
         return false;
     }
@@ -404,13 +406,15 @@ bool SaveDataAccessor::saveChanges() {
         out.flush();
         out.close();
 
-        const Result commit_rc = fsdevCommitDevice("save");
-        if (R_FAILED(commit_rc)) {
-            std::stringstream hexStream;
-            hexStream << std::hex << commit_rc;
-            lastError = "Failed to commit save device: " + std::to_string(commit_rc) + " (0x" + hexStream.str() + ")";
-            LOG_ERROR(lastError);
-            return false;
+        if (isSaveDevicePath) {
+            const Result commit_rc = fsdevCommitDevice("save");
+            if (R_FAILED(commit_rc)) {
+                std::stringstream hexStream;
+                hexStream << std::hex << commit_rc;
+                lastError = "Failed to commit save device: " + std::to_string(commit_rc) + " (0x" + hexStream.str() + ")";
+                LOG_ERROR(lastError);
+                return false;
+            }
         }
 
         hasChanges = false;
@@ -445,7 +449,8 @@ pksm::saves::SaveData::Ref SaveDataAccessor::LoadSaveDataFromFile(
     }
 
     const bool isSaveDevicePathArg = saveName.rfind("save:/", 0) == 0;
-    const std::string savePath = isSaveDevicePathArg ? saveName : (std::string("save:/") + saveName);
+    const bool isAbsoluteDevicePathArg = (saveName.find(":/") != std::string::npos);
+    const std::string savePath = (isSaveDevicePathArg || isAbsoluteDevicePathArg) ? saveName : (std::string("save:/") + saveName);
     const bool isSaveDevicePath = savePath.rfind("save:/", 0) == 0;
 
     if (isSaveDevicePath) {

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <chrono>
+#include <filesystem>
 #include <format>
 #include <switch.h>
 
@@ -11,6 +12,7 @@
 #include "data/providers/SaveDataAccessor.hpp"
 #include "data/providers/SaveDataProvider.hpp"
 #include "data/providers/TitleDataProvider.hpp"
+#include "gui/screens/emulator-fileselect-screen/EmulatorFileSelectScreen.hpp"
 #include "gui/shared/FontManager.hpp"
 #include "gui/shared/UIConstants.hpp"
 #include "utils/Logger.hpp"
@@ -497,6 +499,12 @@ void PKSMApplication::OnLoad() {
         LOG_DEBUG("Loading title screen...");
         LOG_MEMORY();
 
+        emulatorFileSelectScreen = pksm::layout::EmulatorFileSelectScreen::New(
+            [this]() { this->ShowTitleLoadScreen(); },
+            [this](pu::ui::Overlay::Ref overlay) { this->StartOverlay(overlay); },
+            [this]() { this->EndOverlay(); }
+        );
+
         // Create title load screen
         LOG_DEBUG("Creating title load screen...");
         titleLoadScreen = pksm::layout::TitleLoadScreen::New(
@@ -508,8 +516,17 @@ void PKSMApplication::OnLoad() {
             [this]() {
                 this->Close(false);
             },
+            [this]() {
+                if (this->emulatorFileSelectScreen) {
+                    this->LoadLayout(this->emulatorFileSelectScreen);
+                }
+            },
             [this](pksm::titles::Title::Ref title, pksm::saves::Save::Ref save) { this->OnSaveSelected(title, save); }
         );
+
+        const bool firstEmuSetup = !std::filesystem::exists("sdmc:/switch/PKSM/emulator_saves.json");
+
+        auto& emulatorFileSelectScreen = this->emulatorFileSelectScreen;
 
         // Create main menu with back callback and overlay handlers
         // Create navigation callbacks for menu buttons
@@ -525,10 +542,27 @@ void PKSMApplication::OnLoad() {
 
         // Create startup screen
         LOG_DEBUG("Creating startup screen...");
-        startupScreen = pksm::layout::StartupScreen::New([this]() {
-            // When startup screen completes, show title load screen
-            this->ShowTitleLoadScreen();
-        });
+        startupScreen = pksm::layout::StartupScreen::New(
+            [this, firstEmuSetup, emulatorFileSelectScreen]() {
+                // When startup screen completes, continue to firstEmuSetup if needed
+                if (firstEmuSetup) {
+                    this->LoadLayout(emulatorFileSelectScreen);
+                } else {
+                    this->ShowTitleLoadScreen();
+                }
+            },
+            [this, firstEmuSetup, emulatorFileSelectScreen]() {
+                // Skip sprite download
+                spriteSyncStopRequested = true;
+                spriteSyncUiCompleted = true;
+
+                if (firstEmuSetup) {
+                    this->LoadLayout(emulatorFileSelectScreen);
+                } else {
+                    this->ShowTitleLoadScreen();
+                }
+            }
+        );
         startupScreen->SetProgress(0.0f);
         startupScreen->SetLoadingText("Checking sprites...");
 

@@ -91,14 +91,22 @@ void pksm::ui::FocusableMenu::OnInput(
 }
 
 void pksm::ui::FocusableMenu::MoveUp() {
-    if (!ShouldResignUpFocus()) {
-        this->SetSelectedIndex(this->GetSelectedIndex() - 1);
+    if (this->GetItems().empty()) {
+        return;
+    }
+
+    const auto cur = this->GetSelectedIndex();
+    if (cur > 0) {
+        this->SetSelectedIndex(static_cast<u32>(cur - 1));
         return;
     }
 
     if (onFocusExitCallback) {
         onFocusExitCallback(FocusExitDirection::Up);
+        return;
     }
+
+    this->SetSelectedIndex(static_cast<u32>(this->GetItems().size() - 1));
 }
 
 void pksm::ui::FocusableMenu::MoveDown() {
@@ -165,6 +173,11 @@ void pksm::ui::FocusableMenu::SetDataSource(const std::vector<std::string>& item
         for (const auto& item : currentDataSource) {
             auto menuItem = pu::ui::elm::MenuItem::New(item);
             menuItem->SetColor(global::TEXT_WHITE);
+            menuItem->AddOnKey([this]() {
+                if (onSelectCallback) {
+                    onSelectCallback();
+                }
+            }, pu::ui::TouchPseudoKey);
             this->AddItem(menuItem);
         }
 
