@@ -512,6 +512,7 @@ void EditorScreen::LoadData() {
 
     auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
     if (!saveData || !boxDataProvider) {
+        boxesPanel->SetTwentySlotMode(false);
         boxesPanel->SetBoxCount(1);
         pksm::ui::BoxData b("Box 1"); b.resize(30);
         boxesPanel->SetBoxData(0, b); boxesPanel->ForceRefreshCurrentBox();
@@ -526,6 +527,8 @@ void EditorScreen::LoadData() {
     // Preserve current box position across reloads (e.g. after edit/delete)
     const int prevBox  = boxesPanel->GetCurrentBox();
     const int prevSlot = boxesPanel->GetSelectedSlot();
+
+    boxesPanel->SetTwentySlotMode(boxDataProvider->UsesTwentySlotBox(saveData));
 
     const size_t boxCount = boxDataProvider->GetBoxCount(saveData);
     boxesPanel->SetBoxCount(boxCount);

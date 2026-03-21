@@ -2,8 +2,17 @@
 
 #include <limits>
 
+#include "gui/shared/components/ShakeDirection.hpp"
 #include "gui/shared/UIConstants.hpp"
 #include "utils/Logger.hpp"
+
+namespace {
+
+bool slotIsPadding(size_t index, size_t cols) {
+    return cols >= 2 && (index % cols == 0 || index % cols == cols - 1);
+}
+
+}  // namespace
 
 pksm::ui::BoxGrid::BoxGrid(
     const pu::i32 x,
@@ -26,11 +35,10 @@ pksm::ui::BoxGrid::BoxGrid(
     // Initialize container with calculated width/height
     container = pu::ui::Container::New(x, y, GetWidth(), GetHeight());
 
-    // Set up input handler
-    inputHandler.SetOnMoveLeft([this]() { IGrid::MoveLeft(); });
-    inputHandler.SetOnMoveRight([this]() { IGrid::MoveRight(); });
-    inputHandler.SetOnMoveUp([this]() { IGrid::MoveUp(); });
-    inputHandler.SetOnMoveDown([this]() { IGrid::MoveDown(); });
+    inputHandler.SetOnMoveLeft([this]() { MoveLeft(); });
+    inputHandler.SetOnMoveRight([this]() { MoveRight(); });
+    inputHandler.SetOnMoveUp([this]() { MoveUp(); });
+    inputHandler.SetOnMoveDown([this]() { MoveDown(); });
 
     // Initialize focus manager
     focusManager = input::FocusManager::New("BoxGrid");
@@ -68,6 +76,42 @@ void pksm::ui::BoxGrid::OnRender(pu::ui::render::Renderer::Ref& drawer, const pu
     }
 
     // Optionally render grid dividers/borders if needed
+}
+
+void pksm::ui::BoxGrid::MoveLeft() {
+    if (!twentySlotMode) {
+        IGrid::MoveLeft();
+        return;
+    }
+    const size_t col = selectedIndex % itemsPerRow;
+    if (col <= 1) {
+        if (col == 1 && shouldShakeOnEdge[ShakeDirection::LEFT]) {
+            if (auto item = GetItemAtIndex(selectedIndex)) {
+                item->shakeOutOfBounds(ShakeDirection::LEFT);
+            }
+        }
+        return;
+    }
+    SetSelectedIndex(selectedIndex - 1);
+}
+
+void pksm::ui::BoxGrid::MoveRight() {
+    if (!twentySlotMode) {
+        IGrid::MoveRight();
+        return;
+    }
+    const size_t col = selectedIndex % itemsPerRow;
+    if (col >= itemsPerRow - 2) {
+        if (col == itemsPerRow - 2 && shouldShakeOnEdge[ShakeDirection::RIGHT]) {
+            if (auto item = GetItemAtIndex(selectedIndex)) {
+                item->shakeOutOfBounds(ShakeDirection::RIGHT);
+            }
+        }
+        return;
+    }
+    if (selectedIndex + 1 < GetItemCount()) {
+        SetSelectedIndex(selectedIndex + 1);
+    }
 }
 
 void pksm::ui::BoxGrid::OnInput(
@@ -157,28 +201,30 @@ void pksm::ui::BoxGrid::UpdateGridFromBoxData() {
         boxItem->IFocusable::SetName("BoxItem Element: Slot " + std::to_string(i));
         boxItem->ISelectable::SetName("BoxItem Element: Slot " + std::to_string(i));
 
-        // Set up touch selection for this item
+        const bool pad = twentySlotMode && slotIsPadding(i, itemsPerRow);
         const size_t index = i;
-        boxItem->SetOnTouchSelect([this, index]() {
-            SetSelectedIndex(index);
-            if (onSelectionChangedCallback) {
-                onSelectionChangedCallback(static_cast<int>(index));
-            }
-        });
+        if (!pad) {
+            boxItem->SetOnTouchSelect([this, index]() {
+                SetSelectedIndex(index);
+                if (onSelectionChangedCallback) {
+                    onSelectionChangedCallback(static_cast<int>(index));
+                }
+            });
 
-        // Set up selection callback
-        boxItem->SetOnSelect([this, index]() {
-            if (onSelectionChangedCallback) {
-                onSelectionChangedCallback(static_cast<int>(index));
-            }
-        });
-
-        // Register with focus and selection managers
-        if (auto fm = this->focusManager.lock()) {
-            fm->RegisterFocusable(boxItem);
+            boxItem->SetOnSelect([this, index]() {
+                if (onSelectionChangedCallback) {
+                    onSelectionChangedCallback(static_cast<int>(index));
+                }
+            });
         }
-        if (auto sm = this->selectionManager.lock()) {
-            sm->RegisterSelectable(boxItem);
+
+        if (!pad) {
+            if (auto fm = this->focusManager.lock()) {
+                fm->RegisterFocusable(boxItem);
+            }
+            if (auto sm = this->selectionManager.lock()) {
+                sm->RegisterSelectable(boxItem);
+            }
         }
 
         // Add to our containers
@@ -186,19 +232,38 @@ void pksm::ui::BoxGrid::UpdateGridFromBoxData() {
         container->Add(boxItem);
     }
 
-    // Select the first item by default if we have any items
     if (!items.empty()) {
-        SetSelectedIndex(0);
+        size_t start = 0;
+        if (twentySlotMode) {
+            while (start < items.size() && slotIsPadding(start, itemsPerRow)) {
+                start++;
+            }
+            if (start >= items.size()) {
+                start = 0;
+            }
+        }
+        SetSelectedIndex(start);
 
-        // If this BoxGrid is focused, also focus the first item
-        if (focused && items.size() > 0) {
-            items[0]->RequestFocus();
+        if (focused && start < items.size()) {
+            items[start]->RequestFocus();
             LOG_DEBUG("Initial box item focused");
         }
     }
 }
 
 void pksm::ui::BoxGrid::SetSelectedIndex(size_t index) {
+    if (twentySlotMode && index < items.size() && slotIsPadding(index, itemsPerRow)) {
+        while (index < items.size() && slotIsPadding(index, itemsPerRow)) {
+            index++;
+        }
+        if (index >= items.size()) {
+            index = 0;
+            while (index < items.size() && slotIsPadding(index, itemsPerRow)) {
+                index++;
+            }
+        }
+    }
+
     LOG_DEBUG("[BoxGrid] Setting selected index: " + std::to_string(index));
     if (index < items.size() && selectedIndex != index) {
         selectedIndex = index;

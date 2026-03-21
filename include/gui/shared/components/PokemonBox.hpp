@@ -171,6 +171,9 @@ public:
     // Optional chrome controls (used by Editor team panel)
     void SetNavigationControlsVisible(bool visible);
     void SetFooterControlsVisible(bool visible);
+
+    void SetTwentySlotMode(bool on);
+    [[nodiscard]] bool GetTwentySlotMode() const;
 };
 
 }  // namespace pksm::ui

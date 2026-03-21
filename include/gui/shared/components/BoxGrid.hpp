@@ -29,6 +29,7 @@ private:
     // State
     bool focused = false;
     bool selected = false;
+    bool twentySlotMode = false;
 
     // Current box data
     BoxData currentBoxData;
@@ -90,6 +91,12 @@ public:
 
     // Additional focus/selection methods
     void EstablishOwningRelationship();
+
+    void SetTwentySlotMode(bool on) { twentySlotMode = on; }
+    [[nodiscard]] bool GetTwentySlotMode() const { return twentySlotMode; }
+
+    void MoveLeft() override;
+    void MoveRight() override;
 
     // Set the data for a specific Pokémon slot
     void SetPokemonData(int slotIndex, const BoxPokemonData& data);

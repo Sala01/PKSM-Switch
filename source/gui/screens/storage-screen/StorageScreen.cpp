@@ -281,6 +281,7 @@ void StorageScreen::LoadBoxData() {
 
     // reset Save Box data before loading new box data
     if (pokemonSaveBox) {
+        pokemonSaveBox->SetTwentySlotMode(false);
         pokemonSaveBox->SetBoxCount(0);
         pokemonSaveBox->SetCurrentBox(0);
     }
@@ -303,16 +304,18 @@ void StorageScreen::LoadBoxData() {
         LOG_DEBUG("No save data available, using fallback box data");
         // Set a default box count if no save data available
         if (pokemonSaveBox) {
+            pokemonSaveBox->SetTwentySlotMode(false);
             pokemonSaveBox->SetBoxCount(1);
             pksm::ui::BoxData emptyBox;
             emptyBox.name = "Box 1";
             pokemonSaveBox->SetBoxData(0, emptyBox);
-            // start at box 0
             pokemonSaveBox->SetCurrentBox(0);
         }
         LOG_DEBUG("Fallback box data loaded");
         return;
     }
+
+    pokemonSaveBox->SetTwentySlotMode(boxDataProvider->UsesTwentySlotBox(currentSave));
 
     const size_t boxCount = boxDataProvider->GetBoxCount(currentSave);
     LOG_DEBUG("Setting box count to " + std::to_string(boxCount));
@@ -496,7 +499,8 @@ void StorageScreen::OnInput(u64 down, u64 up, u64 held) {
     if (activeBox == ActiveBox::Save && pokemonSaveBox) {
         const int slotIndex = pokemonSaveBox->GetSelectedSlot();
         if (slotIndex >= 0) {
-            shouldHandleBoxSwitch = (slotIndex % ITEMS_PER_ROW) == 0;
+            const int edgeCol = pokemonSaveBox->GetTwentySlotMode() ? 1 : 0;
+            shouldHandleBoxSwitch = (slotIndex % ITEMS_PER_ROW) == edgeCol;
         }
     } else if (activeBox == ActiveBox::Bank && pokemonBankBox) {
         const int slotIndex = pokemonBankBox->GetSelectedSlot();
@@ -505,7 +509,6 @@ void StorageScreen::OnInput(u64 down, u64 up, u64 held) {
         }
     }
 
-    // process directional inputs for cross-box switching at the box edge
     if (shouldHandleBoxSwitch) {
         pokemonBoxDirectionalHandler.HandleInput(down, held);
     }
@@ -516,6 +519,10 @@ void StorageScreen::OnInput(u64 down, u64 up, u64 held) {
 
 void StorageScreen::SwapCurrentBoxes() {
     if (!pokemonBankBox || !pokemonSaveBox || !bankBoxDataProvider || !boxDataProvider || !saveDataAccessor) {
+        return;
+    }
+
+    if (pokemonSaveBox->GetTwentySlotMode()) {
         return;
     }
 

@@ -156,6 +156,39 @@ void ClearInvalidMoves(pksm::PKX& pk, pksm::GameVersion targetVersion) {
     pk.fixMoves();
 }
 
+// INTL Gen I/II hold 20 Pokemon per box while JPN Gen I/II hold 30
+bool saveIsTwentySlot(const pksm::Sav* sav) {
+    if (!sav) {
+        return false;
+    }
+    const int boxes = sav->maxBoxes();
+    if (boxes <= 0) {
+        return false;
+    }
+    return (sav->maxSlot() / boxes) == 20;
+}
+
+bool paddingSlot(int gridSlot) {
+    if (gridSlot < 0 || gridSlot >= 30) {
+        return true;
+    }
+    const int col = gridSlot % 6;
+    return col == 0 || col == 5;
+}
+
+int toSaveSlot(int gridSlot) {
+    const int row = gridSlot / 6;
+    const int col = gridSlot % 6;
+    if (col < 1 || col > 4) {
+        return -1;
+    }
+    return row * 4 + (col - 1);
+}
+
+int toGridSlot(int saveSlot) {
+    return (saveSlot / 4) * 6 + 1 + (saveSlot % 4);
+}
+
 } // namespace
 
 BoxDataProvider::BoxDataProvider() = default;
@@ -271,7 +304,18 @@ std::unique_ptr<pksm::PKX> BoxDataProvider::GetPokemon(
             return nullptr;
         }
 
-        auto pk = sav->pkm(static_cast<u8>(boxIndex), static_cast<u8>(slotIndex));
+        int readSlot = slotIndex;
+        if (saveIsTwentySlot(sav)) {
+            if (paddingSlot(slotIndex)) {
+                return nullptr;
+            }
+            readSlot = toSaveSlot(slotIndex);
+            if (readSlot < 0 || readSlot >= 20) {
+                return nullptr;
+            }
+        }
+
+        auto pk = sav->pkm(static_cast<u8>(boxIndex), static_cast<u8>(readSlot));
         if (!pk) {
             return nullptr;
         }
@@ -331,29 +375,55 @@ pksm::ui::BoxData BoxDataProvider::LoadBoxDataFromSave(
 
         boxData.resize(30);
 
-        for (int slot = 0; slot < 30; slot++) {
-            auto pk = sav->pkm(static_cast<u8>(boxIndex), static_cast<u8>(slot));
-            if (!pk) {
-                boxData.pokemon[slot] = pksm::ui::BoxPokemonData();
-                continue;
+        if (saveIsTwentySlot(sav)) {
+            for (int s = 0; s < 20; s++) {
+                const int g = toGridSlot(s);
+                auto pk = sav->pkm(static_cast<u8>(boxIndex), static_cast<u8>(s));
+                if (!pk) {
+                    boxData.pokemon[g] = pksm::ui::BoxPokemonData();
+                    continue;
+                }
+                if (pk->isEncrypted()) {
+                    pk->decrypt();
+                }
+                const u16 species = static_cast<u16>(pk->species());
+                if (species == 0) {
+                    boxData.pokemon[g] = pksm::ui::BoxPokemonData();
+                    continue;
+                }
+                const u16 form_u16 = pk->alternativeForm();
+                const u8 form = form_u16 > 255 ? 0 : static_cast<u8>(form_u16);
+                boxData.pokemon[g] = pksm::ui::BoxPokemonData(species, form, pk->shiny());
             }
-
-            // make fields readable across gens if the PKX is still encrypted
-            if (pk->isEncrypted()) {
-                pk->decrypt();
+            for (int g = 0; g < 30; g++) {
+                if (paddingSlot(g)) {
+                    boxData.pokemon[g] = pksm::ui::BoxPokemonData();
+                }
             }
+        } else {
+            for (int slot = 0; slot < 30; slot++) {
+                auto pk = sav->pkm(static_cast<u8>(boxIndex), static_cast<u8>(slot));
+                if (!pk) {
+                    boxData.pokemon[slot] = pksm::ui::BoxPokemonData();
+                    continue;
+                }
 
-            const u16 species = static_cast<u16>(pk->species());
-            if (species == 0) {
-                boxData.pokemon[slot] = pksm::ui::BoxPokemonData();
-                continue;
+                if (pk->isEncrypted()) {
+                    pk->decrypt();
+                }
+
+                const u16 species = static_cast<u16>(pk->species());
+                if (species == 0) {
+                    boxData.pokemon[slot] = pksm::ui::BoxPokemonData();
+                    continue;
+                }
+
+                const u16 form_u16 = pk->alternativeForm();
+                const u8 form = form_u16 > 255 ? 0 : static_cast<u8>(form_u16);
+                const bool shiny = pk->shiny();
+
+                boxData.pokemon[slot] = pksm::ui::BoxPokemonData(species, form, shiny);
             }
-
-            const u16 form_u16 = pk->alternativeForm();
-            const u8 form = form_u16 > 255 ? 0 : static_cast<u8>(form_u16);
-            const bool shiny = pk->shiny();
-
-            boxData.pokemon[slot] = pksm::ui::BoxPokemonData(species, form, shiny);
         }
 
         return boxData;
@@ -377,8 +447,19 @@ bool BoxDataProvider::WritePokemon(
         if (boxIndex < 0 || boxIndex >= sav->maxBoxes() || slotIndex < 0 || slotIndex >= 30)
             return false;
 
+        int writeSlot = slotIndex;
+        if (saveIsTwentySlot(sav)) {
+            if (paddingSlot(slotIndex)) {
+                return false;
+            }
+            writeSlot = toSaveSlot(slotIndex);
+            if (writeSlot < 0 || writeSlot >= 20) {
+                return false;
+            }
+        }
+
         // sav->pkm() setter expects a decrypted PKX — the save handles internal encryption
-        sav->pkm(pkx, static_cast<u8>(boxIndex), static_cast<u8>(slotIndex), false);
+        sav->pkm(pkx, static_cast<u8>(boxIndex), static_cast<u8>(writeSlot), false);
         saveDirty = true;
         return true;
     } catch (const std::exception &e) {
@@ -399,12 +480,24 @@ bool BoxDataProvider::ClearSlot(
         if (boxIndex < 0 || boxIndex >= sav->maxBoxes() || slotIndex < 0 || slotIndex >= 30)
             return false;
 
+        if (saveIsTwentySlot(sav) && paddingSlot(slotIndex)) {
+            return true;
+        }
+
+        int clearSlot = slotIndex;
+        if (saveIsTwentySlot(sav)) {
+            clearSlot = toSaveSlot(slotIndex);
+            if (clearSlot < 0 || clearSlot >= 20) {
+                return false;
+            }
+        }
+
         // Read the existing PKX to get the right type/size for this save, then zero it out.
         // A zeroed PKX has species==0 which the read path treats as empty.
-        auto pk = sav->pkm(static_cast<u8>(boxIndex), static_cast<u8>(slotIndex));
+        auto pk = sav->pkm(static_cast<u8>(boxIndex), static_cast<u8>(clearSlot));
         if (pk) {
             std::fill_n(pk->rawData().data(), pk->getLength(), u8(0));
-            sav->pkm(*pk, static_cast<u8>(boxIndex), static_cast<u8>(slotIndex), false);
+            sav->pkm(*pk, static_cast<u8>(boxIndex), static_cast<u8>(clearSlot), false);
         }
 
         saveDirty = true;
@@ -447,14 +540,22 @@ void BoxDataProvider::DiscardPendingWrites() const {
     saveDirty = false;
 }
 
+bool BoxDataProvider::UsesTwentySlotBox(const pksm::saves::SaveData::Ref& saveData) const {
+    if (!saveData) {
+        return false;
+    }
+    return saveIsTwentySlot(GetSavForSaveData(saveData));
+}
+
 bool BoxDataProvider::PersistSave(pksm::Sav* sav, const std::string& saveName) const {
-    // Same persistence pipeline as SaveDataAccessor::saveChanges():
-    // finishEditing (encrypt) → write to file → commit device → beginEditing (decrypt for reuse)
+    // Match LoadSavFromPath: save:/ mount, or full device path (sdmc:/ for emulator saves)
     try {
         sav->finishEditing();
 
         const bool isSaveDevicePath = saveName.rfind("save:/", 0) == 0;
-        const std::string savePath = isSaveDevicePath ? saveName : (std::string("save:/") + saveName);
+        const bool isAbsoluteDevicePath = (saveName.find(":/") != std::string::npos);
+        const std::string savePath =
+            (isSaveDevicePath || isAbsoluteDevicePath) ? saveName : (std::string("save:/") + saveName);
 
         const size_t outSize = static_cast<size_t>(sav->getEntireLengthIncludingFooter());
 
@@ -470,8 +571,10 @@ bool BoxDataProvider::PersistSave(pksm::Sav* sav, const std::string& saveName) c
         out.flush();
         out.close();
 
-        const Result rc = fsdevCommitDevice("save");
-        // Re-decrypt so subsequent reads/writes continue to work
+        Result rc = 0;
+        if (isSaveDevicePath) {
+            rc = fsdevCommitDevice("save");
+        }
         sav->beginEditing();
 
         if (R_FAILED(rc)) {

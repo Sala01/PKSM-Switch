@@ -671,6 +671,16 @@ void PokemonBox::SetNavigationControlsVisible(bool visible) {
     UpdateBoxNameText();
 }
 
+void PokemonBox::SetTwentySlotMode(bool on) {
+    if (boxGrid) {
+        boxGrid->SetTwentySlotMode(on);
+    }
+}
+
+bool PokemonBox::GetTwentySlotMode() const {
+    return boxGrid && boxGrid->GetTwentySlotMode();
+}
+
 void PokemonBox::SetFooterControlsVisible(bool visible) {
     footerControlsVisible = visible;
     if (boxSpacesButton) {
