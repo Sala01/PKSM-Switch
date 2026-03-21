@@ -294,10 +294,11 @@ void BagScreen::BuildCategoriesForCurrentSave() {
         }
     }
 
+    const bool is_za = (version == pksm::saves::GameVersion::ZA);
+    const bool is_sv = (version == pksm::saves::GameVersion::SL) || (version == pksm::saves::GameVersion::VL);
+    const bool is_pla = (version == pksm::saves::GameVersion::PLA);
     const bool is_swsh = (version == pksm::saves::GameVersion::SW) || (version == pksm::saves::GameVersion::SH);
     const bool is_lgpe = (version == pksm::saves::GameVersion::GP) || (version == pksm::saves::GameVersion::GE);
-    const bool is_pla = (version == pksm::saves::GameVersion::PLA);
-    const bool is_za = (version == pksm::saves::GameVersion::ZA);
 
     if (is_za) {
         categoryLabels = {
@@ -321,7 +322,7 @@ void BagScreen::BuildCategoriesForCurrentSave() {
             pksm::saves::BagPouch::Treasure,
             pksm::saves::BagPouch::KeyItem,
         };
-    } else if (is_pla) {
+    } else if (is_sv) {
         categoryLabels = {
             "Items",
             "Key Items",
@@ -333,27 +334,17 @@ void BagScreen::BuildCategoriesForCurrentSave() {
             pksm::saves::BagPouch::KeyItem,
             pksm::saves::BagPouch::PCItem,
         };
-    } else if (is_lgpe) {
+    } else if (is_pla) {
         categoryLabels = {
-            "Medicine Pocket",
-            "TM Case",
-            "Candy Jar",
-            "Power-Up Pocket",
-            "Catching Pocket",
-            "Battle Pocket",
-            "Bag",
-            "Unused",
+            "Items",
+            "Key Items",
+            "PC Items",
         };
 
         categoryPouches = {
-            pksm::saves::BagPouch::Medicine,
-            pksm::saves::BagPouch::TM,
-            pksm::saves::BagPouch::Candy,
-            pksm::saves::BagPouch::ZCrystals,
-            pksm::saves::BagPouch::CatchingItem,
-            pksm::saves::BagPouch::Battle,
             pksm::saves::BagPouch::NormalItem,
-            pksm::saves::BagPouch::Unknown,
+            pksm::saves::BagPouch::KeyItem,
+            pksm::saves::BagPouch::PCItem,
         };
     } else if (is_swsh) {
         categoryLabels = {
@@ -378,6 +369,28 @@ void BagScreen::BuildCategoriesForCurrentSave() {
             pksm::saves::BagPouch::Treasure,
             pksm::saves::BagPouch::Ingredient,
             pksm::saves::BagPouch::KeyItem,
+        };
+    } else if (is_lgpe) {
+        categoryLabels = {
+            "Medicine Pocket",
+            "TM Case",
+            "Candy Jar",
+            "Power-Up Pocket",
+            "Catching Pocket",
+            "Battle Pocket",
+            "Bag",
+            "Unused",
+        };
+
+        categoryPouches = {
+            pksm::saves::BagPouch::Medicine,
+            pksm::saves::BagPouch::TM,
+            pksm::saves::BagPouch::Candy,
+            pksm::saves::BagPouch::ZCrystals,
+            pksm::saves::BagPouch::CatchingItem,
+            pksm::saves::BagPouch::Battle,
+            pksm::saves::BagPouch::NormalItem,
+            pksm::saves::BagPouch::Unknown,
         };
     } else {
         categoryLabels = {
@@ -575,6 +588,7 @@ void BagScreen::ShowAddItemOverlay() {
     }
  
     addItemOverlay = pu::ui::Overlay::New(0, 0, GetWidth(), GetHeight(), pu::ui::Color(0, 0, 0, 200));
+    addItemOverlay->SetRadius(0);
  
     auto title = pu::ui::elm::TextBlock::New(SIDE_MARGIN, HEADER_TOP_MARGIN, "Add Item");
     title->SetColor(pksm::ui::global::TEXT_WHITE);

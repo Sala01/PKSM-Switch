@@ -175,6 +175,10 @@ pksm::saves::GameVersion ToAppGameVersion(pksm::GameVersion version) {
             return AGV::SH;
         case GV::PLA:
             return AGV::PLA;
+        case GV::SL:
+            return AGV::SL;
+        case GV::VL:
+            return AGV::VL;
         case GV::ZA:
             return AGV::ZA;
         default:
