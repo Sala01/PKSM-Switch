@@ -17,6 +17,7 @@
 #include "gui/shared/UIConstants.hpp"
 #include "utils/Logger.hpp"
 #include "utils/NotificationManager.hpp"
+#include "utils/SettingsManager.hpp"
 #include "utils/SpriteAssetDownloader.hpp"
 #include "utils/PokemonSpriteManager.hpp"
 
@@ -145,6 +146,15 @@ PKSMApplication::Ref PKSMApplication::Initialize() {
         utils::Logger::Initialize();
         LOG_INFO("Initializing PKSM...");
         LOG_MEMORY();  // Initial memory state
+
+        // Initialize settings manager
+        LOG_DEBUG("Initializing settings manager...");
+        auto& settingsManager = utils::SettingsManager::getInstance();
+        if (!settingsManager.initialize()) {
+            LOG_WARNING("Failed to initialize settings manager, using defaults");
+        } else {
+            LOG_DEBUG("Settings manager initialized successfully");
+        }
 
         // Initialize renderer with all configurations
         auto renderer_opts = CreateRendererOptions();
