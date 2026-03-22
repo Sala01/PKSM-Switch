@@ -299,6 +299,8 @@ void BagScreen::BuildCategoriesForCurrentSave() {
     const bool is_pla = (version == pksm::saves::GameVersion::PLA);
     const bool is_swsh = (version == pksm::saves::GameVersion::SW) || (version == pksm::saves::GameVersion::SH);
     const bool is_lgpe = (version == pksm::saves::GameVersion::GP) || (version == pksm::saves::GameVersion::GE);
+    const bool is_gsc = (version == pksm::saves::GameVersion::GD) || (version == pksm::saves::GameVersion::SV) || (version == pksm::saves::GameVersion::C);
+    const bool is_rgby = (version == pksm::saves::GameVersion::RD) || (version == pksm::saves::GameVersion::GN) || (version == pksm::saves::GameVersion::BU) || (version == pksm::saves::GameVersion::YW);
 
     if (is_za) {
         categoryLabels = {
@@ -372,14 +374,13 @@ void BagScreen::BuildCategoriesForCurrentSave() {
         };
     } else if (is_lgpe) {
         categoryLabels = {
-            "Medicine Pocket",
-            "TM Case",
-            "Candy Jar",
-            "Power-Up Pocket",
-            "Catching Pocket",
-            "Battle Pocket",
-            "Bag",
-            "Unused",
+            "Medicine",
+            "TMs/HMs",
+            "Candies",
+            "Power-Up Items",
+            "Catching Items",
+            "Battle Items",
+            "Items",
         };
 
         categoryPouches = {
@@ -390,7 +391,32 @@ void BagScreen::BuildCategoriesForCurrentSave() {
             pksm::saves::BagPouch::CatchingItem,
             pksm::saves::BagPouch::Battle,
             pksm::saves::BagPouch::NormalItem,
-            pksm::saves::BagPouch::Unknown,
+        };
+    } else if (is_gsc) {
+        categoryLabels = {
+            "TMs/HMs",
+            "Items",
+            "Key Items",
+            "Balls",
+            "PC Items",
+        };
+
+        categoryPouches = {
+            pksm::saves::BagPouch::TM,
+            pksm::saves::BagPouch::NormalItem,
+            pksm::saves::BagPouch::KeyItem,
+            pksm::saves::BagPouch::Ball,
+            pksm::saves::BagPouch::PCItem,
+        };
+    } else if (is_rgby) {
+        categoryLabels = {
+            "Items",
+            "PC Items",
+        };
+
+        categoryPouches = {
+            pksm::saves::BagPouch::NormalItem,
+            pksm::saves::BagPouch::PCItem,  
         };
     } else {
         categoryLabels = {
@@ -494,7 +520,6 @@ void BagScreen::CreateItemControls() {
     decreaseButton->SetOnClick([this]() {
         if (currentItemQuantity > 0) {
             currentItemQuantity--;
- 
             auto saveData = this->saveDataAccessor ? this->saveDataAccessor->getCurrentSaveData() : nullptr;
             if (saveData && itemList && !currentItemMap.empty()) {
                 const auto sel = itemList->GetSelectedIndex();
@@ -502,14 +527,21 @@ void BagScreen::CreateItemControls() {
                     const auto bag_idx = currentItemMap.at(static_cast<size_t>(sel));
                     const auto &items = saveData->getBagItems();
                     if (bag_idx < items.size()) {
-                        auto updated = items;
-                        updated.at(bag_idx).count = currentItemQuantity;
-                        saveData->setBagItems(std::move(updated));
-                        this->saveDataAccessor->markUnsavedChanges();
+                        const auto &item = items.at(bag_idx);
+                        const auto itemName = i18n::item(pksm::Language::ENG, item.itemId);
+                        const bool isMegaStone = !itemName.empty() && itemName.find("NAITO") != std::string::npos;
+                        const u16 maxQty = (saveData->getVersion() == pksm::saves::GameVersion::ZA && isMegaStone) ? 1 : 999;
+                        const u16 newQty = std::min(static_cast<u16>(currentItemQuantity), maxQty);
+                        if (newQty > 0) {
+                            auto updated = items;
+                            updated.at(bag_idx).count = newQty;
+                            saveData->setBagItems(std::move(updated));
+                            this->saveDataAccessor->markUnsavedChanges();
+                            currentItemQuantity = newQty;
+                        }
                     }
                 }
             }
- 
             UpdateItemDisplay();
         }
     });
@@ -539,7 +571,6 @@ void BagScreen::CreateItemControls() {
     increaseButton->SetContentColor(pksm::ui::global::TEXT_WHITE);
     increaseButton->SetOnClick([this]() {
         currentItemQuantity++;
- 
         auto saveData = this->saveDataAccessor ? this->saveDataAccessor->getCurrentSaveData() : nullptr;
         if (saveData && itemList && !currentItemMap.empty()) {
             const auto sel = itemList->GetSelectedIndex();
@@ -547,19 +578,26 @@ void BagScreen::CreateItemControls() {
                 const auto bag_idx = currentItemMap.at(static_cast<size_t>(sel));
                 const auto &items = saveData->getBagItems();
                 if (bag_idx < items.size()) {
-                    auto updated = items;
-                    updated.at(bag_idx).count = currentItemQuantity;
-                    saveData->setBagItems(std::move(updated));
-                    this->saveDataAccessor->markUnsavedChanges();
+                    const auto &item = items.at(bag_idx);
+                    const auto itemName = i18n::item(pksm::Language::ENG, item.itemId);
+                    const bool isMegaStone = !itemName.empty() && itemName.find("NAITO") != std::string::npos;
+                    const u16 maxQty = (saveData->getVersion() == pksm::saves::GameVersion::ZA && isMegaStone) ? 1 : 999;
+                    const u16 newQty = std::min(static_cast<u16>(currentItemQuantity), maxQty);
+                    if (newQty > 0) {
+                        auto updated = items;
+                        updated.at(bag_idx).count = newQty;
+                        saveData->setBagItems(std::move(updated));
+                        this->saveDataAccessor->markUnsavedChanges();
+                        currentItemQuantity = newQty;
+                    }
                 }
             }
         }
- 
         UpdateItemDisplay();
     });
     increaseButton->SetVisible(false);
     this->Add(increaseButton);
- 
+
     backButton = pksm::ui::FocusableButton::New(
         SIDE_MARGIN,
         ITEM_CONTROL_TOP_MARGIN + 500,
