@@ -204,13 +204,13 @@ namespace pksm
         switch (pouch)
         {
             case Pouch::NormalItem:
-                return std::make_unique<Item8>(getBlock(KItems)->decryptedData() + 4 * slot);
+                return std::make_unique<Item8a>(getBlock(KItems)->decryptedData() + 4 * slot);
             case Pouch::KeyItem:
-                return std::make_unique<Item8>(getBlock(KItemsKey)->decryptedData() + 4 * slot);
+                return std::make_unique<Item8a>(getBlock(KItemsKey)->decryptedData() + 4 * slot);
             case Pouch::PCItem:
-                return std::make_unique<Item8>(getBlock(KItemsStored)->decryptedData() + 4 * slot);
+                return std::make_unique<Item8a>(getBlock(KItemsStored)->decryptedData() + 4 * slot);
             default:
-                return std::make_unique<Item8>();
+                return std::make_unique<Item8a>();
         }
     }
 
