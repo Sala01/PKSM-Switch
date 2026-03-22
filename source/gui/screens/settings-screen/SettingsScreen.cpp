@@ -11,10 +11,12 @@ namespace pksm::layout {
 SettingsScreen::SettingsScreen(
     std::function<void()> onBack,
     std::function<void(pu::ui::Overlay::Ref)> onShowOverlay,
-    std::function<void()> onHideOverlay
+    std::function<void()> onHideOverlay,
+    std::function<void()> onShowEmulatorConfig
 )
   : BaseLayout(onShowOverlay, onHideOverlay),
     onBack(onBack),
+    onShowEmulatorConfig(onShowEmulatorConfig),
     buttonHandler(),
     settingsManager(nullptr) {
     
@@ -118,6 +120,26 @@ SettingsScreen::SettingsScreen(
             }
         }
     );
+    currentY += BUTTON_HEIGHT + BUTTON_SPACING;
+
+    // Reconfigure Section
+    CreateSectionHeader("Reconfigure", currentY);
+    currentY += SECTION_SPACING;
+
+    CreateSettingButton(
+        "Reconfigure Emulator Saves",
+        "",
+        currentY,
+        [this, onShowEmulatorConfig]() { 
+            LOG_DEBUG("Reconfigure emulator saves setting clicked");
+            if (onShowEmulatorConfig) {
+                onShowEmulatorConfig();
+            } else {
+                pksm::utils::NotificationManager::Push("Settings", "Emulator configuration not available.");
+            }
+        }
+    );
+    currentY += BUTTON_HEIGHT + BUTTON_SPACING;
 
     // Initialize focus manager
     focusManager = pksm::input::FocusManager::New("SettingsScreen Manager");

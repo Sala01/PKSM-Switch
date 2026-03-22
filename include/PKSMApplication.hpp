@@ -82,6 +82,7 @@ namespace pksm
         void ShowSettingsScreen();
         void ShowTitleLoadScreen();
         void ShowStorageScreen();
+        void ShowEmulatorFileSelectScreen();
 
         // Save handling
         void OnSaveSelected(pksm::titles::Title::Ref title, pksm::saves::Save::Ref save);

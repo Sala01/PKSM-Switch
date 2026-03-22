@@ -28,7 +28,8 @@ namespace pksm::layout
         SettingsScreen(
             std::function<void()> onBack,
             std::function<void(pu::ui::Overlay::Ref)> onShowOverlay,
-            std::function<void()> onHideOverlay);
+            std::function<void()> onHideOverlay,
+            std::function<void()> onShowEmulatorConfig = nullptr);
         PU_SMART_CTOR(SettingsScreen)
         ~SettingsScreen();
 
@@ -37,6 +38,7 @@ namespace pksm::layout
         pu::ui::elm::Element::Ref background;
         pu::ui::Color bgColor = pu::ui::Color(39, 66, 164, 255);
         std::function<void()> onBack;
+        std::function<void()> onShowEmulatorConfig;
 
         // Header
         pu::ui::elm::TextBlock::Ref headerText;

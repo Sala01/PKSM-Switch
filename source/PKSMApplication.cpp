@@ -480,6 +480,13 @@ void PKSMApplication::ShowBagScreen() {
     this->LoadLayout(this->bagScreen);
 }
 
+void PKSMApplication::ShowEmulatorFileSelectScreen() {
+    LOG_DEBUG("Switching to emulator file select screen");
+    if (this->emulatorFileSelectScreen) {
+        this->LoadLayout(this->emulatorFileSelectScreen);
+    }
+}
+
 void PKSMApplication::OnSaveSelected(pksm::titles::Title::Ref title, pksm::saves::Save::Ref save) {
     LOG_DEBUG("Save selected: " + save->getName() + " for title: " + title->getName());
     LOG_DEBUG("Title ID: " + std::to_string(title->getTitleId()));
@@ -614,7 +621,8 @@ void PKSMApplication::OnLoad() {
         settingsScreen = pksm::layout::SettingsScreen::New(
             [this]() { this->ShowMainMenu(); },  // Back handler goes to main menu
             [this](pu::ui::Overlay::Ref overlay) { this->StartOverlay(overlay); },
-            [this]() { this->EndOverlay(); }
+            [this]() { this->EndOverlay(); },
+            [this]() { this->ShowEmulatorFileSelectScreen(); }  // Emulator config callback
         );
 
         // Create editor screen
