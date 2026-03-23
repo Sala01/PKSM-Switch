@@ -393,7 +393,7 @@ pksm::ui::BoxData BoxDataProvider::LoadBoxDataFromSave(
                 }
                 const u16 form_u16 = pk->alternativeForm();
                 const u8 form = form_u16 > 255 ? 0 : static_cast<u8>(form_u16);
-                boxData.pokemon[g] = pksm::ui::BoxPokemonData(species, form, pk->shiny());
+                boxData.pokemon[g] = pksm::ui::BoxPokemonData(species, form, pk->shiny(), pk->gender());
             }
             for (int g = 0; g < 30; g++) {
                 if (paddingSlot(g)) {
@@ -422,7 +422,7 @@ pksm::ui::BoxData BoxDataProvider::LoadBoxDataFromSave(
                 const u8 form = form_u16 > 255 ? 0 : static_cast<u8>(form_u16);
                 const bool shiny = pk->shiny();
 
-                boxData.pokemon[slot] = pksm::ui::BoxPokemonData(species, form, shiny);
+                boxData.pokemon[slot] = pksm::ui::BoxPokemonData(species, form, shiny, pk->gender());
             }
         }
 

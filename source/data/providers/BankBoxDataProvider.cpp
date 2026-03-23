@@ -356,7 +356,7 @@ pksm::ui::BoxData BankBoxDataProvider::GetBoxData(const pksm::saves::SaveData::R
         const u16 form_u16 = pk->alternativeForm();
         const u8 form = form_u16 > 255 ? 0 : static_cast<u8>(form_u16);
         const bool shiny = pk->shiny();
-        boxData.pokemon[slot] = pksm::ui::BoxPokemonData(species, form, shiny);
+        boxData.pokemon[slot] = pksm::ui::BoxPokemonData(species, form, shiny, pk->gender());
     }
 
     return boxData;

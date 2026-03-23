@@ -11,7 +11,7 @@ namespace {
 pksm::ui::BoxPokemonData PkxToVisual(const pksm::PKX& pk) {
     const u16 form_u16 = pk.alternativeForm();
     const u8 form = form_u16 > 255 ? 0 : static_cast<u8>(form_u16);
-    return pksm::ui::BoxPokemonData(static_cast<u16>(pk.species()), form, pk.shiny());
+    return pksm::ui::BoxPokemonData(static_cast<u16>(pk.species()), form, pk.shiny(), pk.gender());
 }
 
 } // namespace
