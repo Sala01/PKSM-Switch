@@ -2,9 +2,13 @@
 PKSM.elf
 PKSM.nacp
 PKSM.lst
+.last_build.log
+NUL
+Makefile
 
 # Build Folder
 /build/
+/build-*/
 
 # vscode settings
 /.vscode/
