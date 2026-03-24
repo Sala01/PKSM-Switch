@@ -10,6 +10,18 @@ namespace pksm::utils {
 class SpriteAssetDownloader {
 public:
     struct ProgressInfo {
+        enum class Phase {
+            None = 0,
+            ZipDownload,
+            ZipExtract,
+            IncrementalDownload
+        };
+
+        Phase phase = Phase::None;
+        bool usedZip = false;
+        bool usingFallback = false;
+        std::size_t stageCurrent = 0;
+        std::size_t stageTotal = 0;
         std::size_t totalMissing = 0;
         std::size_t processed = 0;
         std::size_t downloaded = 0;
@@ -20,6 +32,9 @@ public:
     struct SyncResult {
         bool attemptedNetwork = false;
         bool downloadedDataJson = false;
+        bool usedZipPack = false;
+        bool zipPackVerified = false;
+        bool zipFallbackTriggered = false;
         std::size_t downloadedSprites = 0;
         std::size_t skippedSprites = 0;
         std::size_t failedSprites = 0;
