@@ -11,4 +11,11 @@ Makefile
 /build-*/
 
 # vscode settings
+
 /.vscode/
+
+# my internal tools
+/tools/
+dist/
+*.nro
+*.elf
