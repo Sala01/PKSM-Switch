@@ -1,10 +1,16 @@
 #include "data/providers/SaveDataAccessor.hpp"
 
+#include <array>
 #include <algorithm>
+#include <chrono>
 #include <cerrno>
+#include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
+
 #include <map>
 #include <optional>
 #include <sstream>
@@ -17,6 +23,7 @@
 #include "pksmcore/enums/Gender.hpp"
 #include "pksmcore/sav/Sav.hpp"
 #include "utils/Logger.hpp"
+#include "utils/SettingsManager.hpp"
 
 using namespace pksm;
 
@@ -175,11 +182,110 @@ pksm::saves::GameVersion ToAppGameVersion(pksm::GameVersion version) {
             return AGV::SH;
         case GV::PLA:
             return AGV::PLA;
+        case GV::SL:
+            return AGV::SL;
+        case GV::VL:
+            return AGV::VL;
         case GV::ZA:
             return AGV::ZA;
         default:
             return AGV::SW;
     }
+}
+
+bool CopyFileBinary(const std::string& src, const std::string& dst) {
+    std::FILE* in = std::fopen(src.c_str(), "rb");
+    if (in == nullptr) {
+        const int e = errno;
+        LOG_WARNING("Backup copy: failed to open source: " + src + " (errno " + std::to_string(e) + ": " + std::string(std::strerror(e)) + ")");
+        return false;
+    }
+
+    std::FILE* out = std::fopen(dst.c_str(), "wb");
+    if (out == nullptr) {
+        const int e = errno;
+        std::fclose(in);
+        LOG_WARNING("Backup copy: failed to open destination: " + dst + " (errno " + std::to_string(e) + ": " + std::string(std::strerror(e)) + ")");
+        return false;
+    }
+
+    std::array<unsigned char, 0x4000> buf{};
+    std::uintmax_t total = 0;
+    while (true) {
+        errno = 0;
+        const size_t got = std::fread(buf.data(), 1, buf.size(), in);
+        if (got == 0) {
+            if (std::ferror(in) != 0) {
+                const int e = errno;
+                std::fclose(in);
+                std::fclose(out);
+                LOG_WARNING("Backup copy: read failed from source: " + src + " (errno " + std::to_string(e) + ": " + std::string(std::strerror(e)) + ")");
+                return false;
+            }
+            break;
+        }
+        const size_t wrote = std::fwrite(buf.data(), 1, got, out);
+        if (wrote != got) {
+            const int e = errno;
+            std::fclose(in);
+            std::fclose(out);
+            LOG_WARNING("Backup copy: write failed to destination: " + dst + " (errno " + std::to_string(e) + ": " + std::string(std::strerror(e)) + ")");
+            return false;
+        }
+        total += static_cast<std::uintmax_t>(wrote);
+    }
+
+    std::fflush(out);
+    std::fclose(in);
+    std::fclose(out);
+
+    if (total == 0) {
+        LOG_WARNING("Backup copy: copied 0 bytes (src: " + src + ", dst: " + dst + ")");
+        return false;
+    }
+
+    LOG_DEBUG("Backup_copy_copied_" + std::to_string(total) + "_bytes_to_" + dst);
+    return true;
+}
+
+std::string SanitizeForPathSegment(std::string s) {
+    std::string result;
+    result.reserve(s.length());
+    
+    // just sanitize the whole thing the switch can only handle ascii
+    for (auto& ch : s) {
+        if (std::isalnum(static_cast<unsigned char>(ch))) {
+            result += ch;
+        } else {
+            result += '_';
+        }
+    }
+    
+    size_t pos = 0;
+    while ((pos = result.find("__", pos)) != std::string::npos) {
+        result.replace(pos, 2, "_");
+    }
+    
+    if (!result.empty() && result.back() == '_') {
+        result.pop_back();
+    }
+    
+    return result;
+}
+
+std::string MakeTimestampForPath() {
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t tt = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+    #if defined(_WIN32)
+    localtime_s(&tm, &tt);
+    #else
+    tm = *std::localtime(&tt);
+    #endif
+
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S");
+    return oss.str();
 }
 
 }  // namespace
@@ -218,7 +324,8 @@ bool SaveDataAccessor::loadSave(const pksm::titles::Title::Ref title, const std:
     hasChanges = false;
     lastError.clear();
     const bool isSaveDevicePath = saveName.rfind("save:/", 0) == 0;
-    currentSavePath = isSaveDevicePath ? saveName : (std::string("save:/") + saveName);
+    const bool isAbsoluteDevicePath = (saveName.find(":/") != std::string::npos);
+    currentSavePath = (isSaveDevicePath || isAbsoluteDevicePath) ? saveName : (std::string("save:/") + saveName);
 
     if (onSaveDataChanged) {
         onSaveDataChanged(currentSave);
@@ -238,8 +345,9 @@ bool SaveDataAccessor::saveChanges() {
 
     const auto savePath = !currentSavePath.empty() ? currentSavePath : currentSave->getName();
     const bool isSaveDevicePath = savePath.rfind("save:", 0) == 0;
-    if (!isSaveDevicePath) {
-        lastError = "Refusing to write save changes to a non-save device path: " + savePath;
+    const bool isAbsoluteDevicePath = (savePath.find(":/") != std::string::npos);
+    if (!isSaveDevicePath && !isAbsoluteDevicePath) {
+        lastError = "Refusing to write save changes to a non-save and non-absolute path: " + savePath;
         LOG_ERROR(lastError);
         return false;
     }
@@ -404,13 +512,15 @@ bool SaveDataAccessor::saveChanges() {
         out.flush();
         out.close();
 
-        const Result commit_rc = fsdevCommitDevice("save");
-        if (R_FAILED(commit_rc)) {
-            std::stringstream hexStream;
-            hexStream << std::hex << commit_rc;
-            lastError = "Failed to commit save device: " + std::to_string(commit_rc) + " (0x" + hexStream.str() + ")";
-            LOG_ERROR(lastError);
-            return false;
+        if (isSaveDevicePath) {
+            const Result commit_rc = fsdevCommitDevice("save");
+            if (R_FAILED(commit_rc)) {
+                std::stringstream hexStream;
+                hexStream << std::hex << commit_rc;
+                lastError = "Failed to commit save device: " + std::to_string(commit_rc) + " (0x" + hexStream.str() + ")";
+                LOG_ERROR(lastError);
+                return false;
+            }
         }
 
         hasChanges = false;
@@ -445,14 +555,18 @@ pksm::saves::SaveData::Ref SaveDataAccessor::LoadSaveDataFromFile(
     }
 
     const bool isSaveDevicePathArg = saveName.rfind("save:/", 0) == 0;
-    const std::string savePath = isSaveDevicePathArg ? saveName : (std::string("save:/") + saveName);
+    const bool isAbsoluteDevicePathArg = (saveName.find(":/") != std::string::npos);
+    const std::string savePath = (isSaveDevicePathArg || isAbsoluteDevicePathArg) ? saveName : (std::string("save:/") + saveName);
     const bool isSaveDevicePath = savePath.rfind("save:/", 0) == 0;
 
     if (isSaveDevicePath) {
-        LOG_DEBUG("Mounting save data for title ID: " + std::to_string(title->getTitleId()) + 
-                  " user ID: " + std::to_string(currentUserId.uid[1]) + 
+        LOG_DEBUG("Mounting save data for title ID: " + std::to_string(title->getTitleId()) +
+                  " user ID: " + std::to_string(currentUserId.uid[1]) +
                   " save path: " + savePath);
-        
+
+        // Ensure any previously mounted save device is cleanly unmounted first
+        fsdevUnmountDevice("save");
+
         // Mount save data for read-write access
         Result rc = fsdevMountSaveData("save", title->getTitleId(), currentUserId);
         if (R_FAILED(rc)) {
@@ -473,43 +587,102 @@ pksm::saves::SaveData::Ref SaveDataAccessor::LoadSaveDataFromFile(
         return nullptr;
     }
 
-    std::ifstream in(savePath, std::ios::binary | std::ios::ate);
-    if (!in.good()) {
-        if (isSaveDevicePath) {
-            fsdevUnmountDevice("save");
+    try {
+        auto& settings = pksm::utils::SettingsManager::getInstance();
+        const bool backupEnabled = settings.getBool("backup_save", true);
+        if (backupEnabled) {
+            const std::string gameName = SanitizeForPathSegment(title->getName());
+            const std::string ts = MakeTimestampForPath();
+
+            const std::filesystem::path src_path(savePath);
+            const std::string file_name = src_path.filename().string();
+            const std::filesystem::path dest_dir(std::string("sdmc:/switch/PKSM/savebackup/") + gameName + "/" + ts);
+            const std::filesystem::path dest_path = dest_dir / file_name;
+
+            std::error_code ec;
+            std::filesystem::create_directories(dest_dir, ec);
+            if (ec) {
+                LOG_WARNING("Failed to create backup directory: " + dest_dir.string() + " (" + ec.message() + ")");
+            } else {
+                if (CopyFileBinary(src_path.string(), dest_path.string())) {
+                    LOG_INFO("Backed up save to: " + dest_path.string());
+                } else {
+                    LOG_WARNING("Save backup copy failed for: " + src_path.string());
+                }
+            }
         }
-        LOG_ERROR("Failed to open save file: " + savePath);
-        return nullptr;
+    } catch (const std::exception& e) {
+        LOG_WARNING("Save backup failed, continuing without backup: " + std::string(e.what()));
     }
 
-    const std::streamsize size = in.tellg();
-    if (size <= 0) {
-        if (isSaveDevicePath) {
-            fsdevUnmountDevice("save");
-        }
-        LOG_ERROR("Invalid save file size: " + savePath);
-        return nullptr;
+    std::uintmax_t reported_size = 0;
+    try {
+        reported_size = std::filesystem::file_size(savePath);
+    } catch (const std::exception& e) {
+        LOG_WARNING("Failed to query save file size (will read anyway): " + savePath + " (" + std::string(e.what()) + ")");
     }
-
-    in.seekg(0, std::ios::beg);
 
     std::vector<u8> buffer_vec;
-    try {
-        buffer_vec.resize(size);
-        if (!in.read(reinterpret_cast<char*>(buffer_vec.data()), size)) {
-            if (isSaveDevicePath) {
-                fsdevUnmountDevice("save");
-            }
-            LOG_ERROR("Failed to read save file: " + savePath);
-            return nullptr;
-        }
-    } catch (const std::bad_alloc& e) {
-        LOG_ERROR("Memory allocation failed while reading save: " + std::string(e.what()));
+    std::FILE* fp = std::fopen(savePath.c_str(), "rb");
+    if (fp == nullptr) {
+        const int e = errno;
         if (isSaveDevicePath) {
             fsdevUnmountDevice("save");
         }
+        LOG_ERROR("Failed to fopen save file: " + savePath + " (errno " + std::to_string(e) + ": " + std::string(std::strerror(e)) + ")");
         return nullptr;
     }
+
+    long file_size_l = 0;
+    if (std::fseek(fp, 0, SEEK_END) == 0) {
+        file_size_l = std::ftell(fp);
+        (void)std::fseek(fp, 0, SEEK_SET);
+    }
+
+    if (file_size_l <= 0) {
+        file_size_l = 0;
+    }
+
+    try {
+        if (file_size_l > 0) {
+            buffer_vec.resize(static_cast<size_t>(file_size_l));
+            const size_t got = std::fread(buffer_vec.data(), 1, buffer_vec.size(), fp);
+            buffer_vec.resize(got);
+        } else {
+            constexpr size_t kChunk = 0x4000;
+            std::array<u8, kChunk> chunk{};
+            while (true) {
+                const size_t got = std::fread(chunk.data(), 1, chunk.size(), fp);
+                if (got == 0) {
+                    break;
+                }
+                const size_t old_sz = buffer_vec.size();
+                buffer_vec.resize(old_sz + got);
+                std::memcpy(buffer_vec.data() + old_sz, chunk.data(), got);
+            }
+        }
+    } catch (const std::bad_alloc& e) {
+        std::fclose(fp);
+        if (isSaveDevicePath) {
+            fsdevUnmountDevice("save");
+        }
+        LOG_ERROR("Memory allocation failed while reading save: " + std::string(e.what()));
+        return nullptr;
+    }
+
+    const int read_errno = errno;
+    std::fclose(fp);
+
+    if (buffer_vec.empty()) {
+        if (isSaveDevicePath) {
+            fsdevUnmountDevice("save");
+        }
+        LOG_ERROR("Save file read 0 bytes: " + savePath + " (reported: " + std::to_string(reported_size) + ", errno " + std::to_string(read_errno) + ": " + std::string(std::strerror(read_errno)) + ")");
+        return nullptr;
+    }
+
+    const std::streamsize size = static_cast<std::streamsize>(buffer_vec.size());
+    LOG_DEBUG("Read save bytes: " + std::to_string(size) + " (reported: " + std::to_string(reported_size) + ") path: " + savePath);
 
     std::shared_ptr<u8[]> buffer;
     try {
@@ -519,7 +692,7 @@ pksm::saves::SaveData::Ref SaveDataAccessor::LoadSaveDataFromFile(
         LOG_ERROR("Memory allocation failed for PKSM-Core buffer: " + std::string(e.what()));
         return nullptr;
     }
-    
+
     // keep device mounted for StorageScreen access, don't unmount here
 
     std::unique_ptr<pksm::Sav> sav;

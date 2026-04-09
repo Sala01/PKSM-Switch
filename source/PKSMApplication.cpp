@@ -2,6 +2,7 @@
 
 #include <array>
 #include <chrono>
+#include <filesystem>
 #include <format>
 #include <switch.h>
 
@@ -11,10 +12,12 @@
 #include "data/providers/SaveDataAccessor.hpp"
 #include "data/providers/SaveDataProvider.hpp"
 #include "data/providers/TitleDataProvider.hpp"
+#include "gui/screens/emulator-fileselect-screen/EmulatorFileSelectScreen.hpp"
 #include "gui/shared/FontManager.hpp"
 #include "gui/shared/UIConstants.hpp"
 #include "utils/Logger.hpp"
 #include "utils/NotificationManager.hpp"
+#include "utils/SettingsManager.hpp"
 #include "utils/SpriteAssetDownloader.hpp"
 #include "utils/PokemonSpriteManager.hpp"
 
@@ -143,6 +146,15 @@ PKSMApplication::Ref PKSMApplication::Initialize() {
         utils::Logger::Initialize();
         LOG_INFO("Initializing PKSM...");
         LOG_MEMORY();  // Initial memory state
+
+        // Initialize settings manager
+        LOG_DEBUG("Initializing settings manager...");
+        auto& settingsManager = utils::SettingsManager::getInstance();
+        if (!settingsManager.initialize()) {
+            LOG_WARNING("Failed to initialize settings manager, using defaults");
+        } else {
+            LOG_DEBUG("Settings manager initialized successfully");
+        }
 
         // Initialize renderer with all configurations
         auto renderer_opts = CreateRendererOptions();
@@ -390,6 +402,11 @@ void PKSMApplication::UpdateStartupSyncUI() {
         const auto phase = static_cast<SyncPhase>(spriteSyncPhase.load(std::memory_order_relaxed));
         const std::size_t stageCurrent = spriteSyncStageCurrent.load(std::memory_order_relaxed);
         const std::size_t stageTotal = spriteSyncStageTotal.load(std::memory_order_relaxed);
+        if (total == 0) {
+            spriteSyncRunning = false;
+            spriteSyncDone = true;
+            return;
+        }
 
         static const std::array<const char*, 4> dots = {"", ".", "..", "..."};
         const auto dotIndex = static_cast<std::size_t>(
@@ -545,6 +562,13 @@ void PKSMApplication::ShowBagScreen() {
     this->LoadLayout(this->bagScreen);
 }
 
+void PKSMApplication::ShowEmulatorFileSelectScreen() {
+    LOG_DEBUG("Switching to emulator file select screen");
+    if (this->emulatorFileSelectScreen) {
+        this->LoadLayout(this->emulatorFileSelectScreen);
+    }
+}
+
 void PKSMApplication::OnSaveSelected(pksm::titles::Title::Ref title, pksm::saves::Save::Ref save) {
     LOG_DEBUG("Save selected: " + save->getName() + " for title: " + title->getName());
     LOG_DEBUG("Title ID: " + std::to_string(title->getTitleId()));
@@ -574,6 +598,12 @@ void PKSMApplication::OnLoad() {
         LOG_DEBUG("Loading title screen...");
         LOG_MEMORY();
 
+        emulatorFileSelectScreen = pksm::layout::EmulatorFileSelectScreen::New(
+            [this]() { this->ShowTitleLoadScreen(); },
+            [this](pu::ui::Overlay::Ref overlay) { this->StartOverlay(overlay); },
+            [this]() { this->EndOverlay(); }
+        );
+
         // Create title load screen
         LOG_DEBUG("Creating title load screen...");
         titleLoadScreen = pksm::layout::TitleLoadScreen::New(
@@ -585,8 +615,17 @@ void PKSMApplication::OnLoad() {
             [this]() {
                 this->Close(false);
             },
+            [this]() {
+                if (this->emulatorFileSelectScreen) {
+                    this->LoadLayout(this->emulatorFileSelectScreen);
+                }
+            },
             [this](pksm::titles::Title::Ref title, pksm::saves::Save::Ref save) { this->OnSaveSelected(title, save); }
         );
+
+        const bool firstEmuSetup = !std::filesystem::exists("sdmc:/switch/PKSM/emulator_saves.json");
+
+        auto& emulatorFileSelectScreen = this->emulatorFileSelectScreen;
 
         // Create main menu with back callback and overlay handlers
         // Create navigation callbacks for menu buttons
@@ -602,10 +641,27 @@ void PKSMApplication::OnLoad() {
 
         // Create startup screen
         LOG_DEBUG("Creating startup screen...");
-        startupScreen = pksm::layout::StartupScreen::New([this]() {
-            // When startup screen completes, show title load screen
-            this->ShowTitleLoadScreen();
-        });
+        startupScreen = pksm::layout::StartupScreen::New(
+            [this, firstEmuSetup, emulatorFileSelectScreen]() {
+                // When startup screen completes, continue to firstEmuSetup if needed
+                if (firstEmuSetup) {
+                    this->LoadLayout(emulatorFileSelectScreen);
+                } else {
+                    this->ShowTitleLoadScreen();
+                }
+            },
+            [this, firstEmuSetup, emulatorFileSelectScreen]() {
+                // Skip sprite download
+                spriteSyncStopRequested = true;
+                spriteSyncUiCompleted = true;
+
+                if (firstEmuSetup) {
+                    this->LoadLayout(emulatorFileSelectScreen);
+                } else {
+                    this->ShowTitleLoadScreen();
+                }
+            }
+        );
         startupScreen->SetProgress(0.0f);
         startupScreen->SetLoadingText("Checking sprites...");
 
@@ -647,7 +703,19 @@ void PKSMApplication::OnLoad() {
         settingsScreen = pksm::layout::SettingsScreen::New(
             [this]() { this->ShowMainMenu(); },  // Back handler goes to main menu
             [this](pu::ui::Overlay::Ref overlay) { this->StartOverlay(overlay); },
-            [this]() { this->EndOverlay(); }
+            [this]() { this->EndOverlay(); },
+            [this]() { this->ShowEmulatorFileSelectScreen(); }  // Emulator config callback
+        );
+
+        // Create editor screen
+        LOG_DEBUG("Creating editor screen...");
+        editorScreen = pksm::layout::EditorScreen::New(
+            [this]() { this->ShowMainMenu(); },
+            [this](pu::ui::Overlay::Ref overlay) { this->StartOverlay(overlay); },
+            [this]() { this->EndOverlay(); },
+            saveDataAccessor,
+            boxDataProvider,
+            partyDataProvider
         );
 
         // Create editor screen

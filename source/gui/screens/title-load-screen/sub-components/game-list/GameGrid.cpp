@@ -82,6 +82,14 @@ void pksm::ui::GameGrid::OnInput(
     const u64 keys_held,
     const pu::ui::TouchPoint touch_pos
 ) {
+    if (gameImages.empty()) {
+        return;
+    }
+
+    if (selectedIndex >= gameImages.size()) {
+        selectedIndex = 0;
+    }
+
     // Handle directional input only when focused
     if (focused) {
         inputHandler.HandleInput(keys_down, keys_held);
@@ -131,13 +139,36 @@ void pksm::ui::GameGrid::SetDataSource(const std::vector<titles::Title::Ref>& ti
     gameImages.clear();
     scrollView->Clear();  // Clear all elements from the scrollView
 
+    static pu::sdl2::TextureHandle::Ref fallbackIcon = nullptr;
+    if (!fallbackIcon) {
+        try {
+            auto image = pu::ui::render::LoadImage("romfs:/gfx/data/game_icons/lg_pikachu_icon.jpg");
+            if (image) {
+                fallbackIcon = pu::sdl2::TextureHandle::New(image);
+            }
+        } catch (...) {
+        }
+    }
+
     // Create game images for all titles
     for (size_t i = 0; i < titles.size(); i++) {
+        if (!titles[i]) {
+            continue;
+        }
+
         // Calculate position using IGrid's helper method
         auto position = CalculateItemPosition(i);
 
+        auto icon = titles[i]->getIcon();
+        if (!icon) {
+            icon = fallbackIcon;
+        }
+        if (!icon) {
+            continue;
+        }
+
         auto gameImage =
-            FocusableImage::New(position.first, position.second, titles[i]->getIcon(), 94, GAME_OUTLINE_PADDING);
+            FocusableImage::New(position.first, position.second, icon, 94, GAME_OUTLINE_PADDING);
         gameImage->IFocusable::SetName("GameImage Element with title: " + titles[i]->getName());
         gameImage->ISelectable::SetName("GameImage Element with title: " + titles[i]->getName());
         gameImage->SetWidth(GetItemWidth());
@@ -171,12 +202,17 @@ void pksm::ui::GameGrid::SetDataSource(const std::vector<titles::Title::Ref>& ti
     if (!gameImages.empty()) {
         auto lastGame = gameImages.back();
         auto firstGame = gameImages.front();
+
         // Include outline padding for both top and bottom of content area
         pu::i32 contentHeight = (lastGame->GetY() + lastGame->GetHeight() + GAME_OUTLINE_PADDING) -
             (firstGame->GetY() - GAME_OUTLINE_PADDING);
         scrollView->SetContentHeight(contentHeight);
     } else {
         scrollView->SetContentHeight(0);
+    }
+
+    if (selectedIndex >= gameImages.size()) {
+        selectedIndex = 0;
     }
 
     if (gameImages.size() > selectedIndex && IsFocused()) {
@@ -186,7 +222,9 @@ void pksm::ui::GameGrid::SetDataSource(const std::vector<titles::Title::Ref>& ti
 
 pksm::titles::Title::Ref pksm::ui::GameGrid::GetSelectedTitle() const {
     if (selectedIndex < titles.size()) {
-        return titles[selectedIndex];
+        if (titles[selectedIndex]) {
+            return titles[selectedIndex];
+        }
     }
     return nullptr;
 }

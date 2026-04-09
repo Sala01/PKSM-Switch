@@ -35,6 +35,11 @@ namespace pksm::layout
         ISaveDataAccessor::Ref saveDataAccessor;
         std::function<void()> onBack;
 
+        bool isAddItemOverlayVisible = false;
+        pu::ui::Overlay::Ref addItemOverlay;
+        pksm::ui::FocusableMenu::Ref addItemList;
+        std::vector<u16> addItemIds;
+
         // UI Elements
         pu::ui::elm::TextBlock::Ref headerText;
         pu::ui::elm::TextBlock::Ref categoryHeaderText;
@@ -87,6 +92,11 @@ namespace pksm::layout
         void RefreshItemListForCurrentCategory();
 
         void BuildCategoriesForCurrentSave();
+
+        void ShowAddItemOverlay();
+        void HideAddItemOverlay();
+        void RefreshAddItemListForCurrentCategory();
+        void ConfirmAddSelectedItem();
 
         // Override BaseLayout methods
         std::vector<pksm::ui::HelpItem> GetHelpOverlayItems() const override;

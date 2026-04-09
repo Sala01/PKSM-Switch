@@ -64,7 +64,7 @@ static pu::ui::Color TypeColor(const pksm::Type t) {
 
 static std::string LocalizeMove(const pksm::Language lang, const pksm::Move mv) {
     if (mv == pksm::Move::None) {
-        return "--";
+        return "None";
     }
     const auto &s = i18n::move(lang, mv);
     if (s.empty()) {
@@ -172,7 +172,7 @@ void PokemonSummaryOverlay::Rebuild() {
     auto titleMidText = pu::ui::elm::TextBlock::New(0, 0, titleMid);
     titleMidText->SetColor(pu::ui::Color(255, 255, 255, 255));
     titleMidText->SetFont(heavyFont);
-    titleMidText->SetX(PANEL_X + 420);
+    titleMidText->SetX(PANEL_X + 370);
     titleMidText->SetY(PANEL_Y + 16);
     this->Add(titleMidText);
 
@@ -193,7 +193,7 @@ void PokemonSummaryOverlay::Rebuild() {
         lbl->SetFont(heavyFont);
         this->Add(lbl);
 
-        const pu::i32 valX = x + LABEL_W;
+        const pu::i32 valX = x + LABEL_W + 75;
         auto val = pu::ui::elm::TextBlock::New(valX, y, value);
         val->SetColor(TEXT_DARK);
         val->SetFont(mediumFont);
@@ -218,7 +218,7 @@ void PokemonSummaryOverlay::Rebuild() {
 
     const pu::i32 rightCardX = rightX - 18;
     const pu::i32 rightCardY = contentTop;
-    const pu::i32 rightCardW = PANEL_X + PANEL_W - PAD - rightX + 36;
+    const pu::i32 rightCardW = PANEL_X + PANEL_W - PAD - rightX + 50;
     const pu::i32 rightCardH = PANEL_Y + PANEL_H - PAD - rightCardY + 32;
     auto rightCardBorder = pu::ui::elm::Rectangle::New(rightCardX, rightCardY, rightCardW, rightCardH, cardBorder, 26);
     auto rightCard = pu::ui::elm::Rectangle::New(rightCardX + 4, rightCardY + 4, rightCardW - 8, rightCardH - 8, cardBg, 24);
@@ -273,7 +273,7 @@ void PokemonSummaryOverlay::Rebuild() {
 
     const pu::i32 statsBoxX = rightX;
     const pu::i32 statsBoxY = rightY;
-    const pu::i32 statsBoxW = PANEL_X + PANEL_W - PAD - rightX;
+    const pu::i32 statsBoxW = PANEL_X + PANEL_W - PAD - rightX - 30;
     const pu::i32 statsBoxH = 262;
 
     auto statsHeader = pu::ui::elm::TextBlock::New(statsBoxX + 6, statsBoxY, "Stats (IV / EV / Stat)");
@@ -287,22 +287,22 @@ void PokemonSummaryOverlay::Rebuild() {
     auto addStatRow = [&](pu::i32 &y, const std::string &label, const pu::ui::Color &labelColor, const pksm::Stat st) {
         auto lbl = pu::ui::elm::TextBlock::New(statsBoxX + 16, y, label);
         lbl->SetColor(labelColor);
-        lbl->SetFont(heavyFont);
+        lbl->SetFont(mediumFont);
         this->Add(lbl);
 
-        auto ivT = pu::ui::elm::TextBlock::New(colIV, y, std::to_string(this->pk->iv(st)));
+        auto ivT = pu::ui::elm::TextBlock::New(colIV - 55, y, std::to_string(this->pk->iv(st)));
         ivT->SetColor(TEXT_DARK);
-        ivT->SetFont(heavyFont);
+        ivT->SetFont(mediumFont);
         this->Add(ivT);
 
-        auto evT = pu::ui::elm::TextBlock::New(colEV, y, std::to_string(this->pk->ev(st)));
+        auto evT = pu::ui::elm::TextBlock::New(colEV - 55, y, std::to_string(this->pk->ev(st)));
         evT->SetColor(TEXT_DARK);
-        evT->SetFont(heavyFont);
+        evT->SetFont(mediumFont);
         this->Add(evT);
 
-        auto stT = pu::ui::elm::TextBlock::New(colST, y, std::to_string(this->pk->stat(st)));
+        auto stT = pu::ui::elm::TextBlock::New(colST - 55, y, std::to_string(this->pk->stat(st)));
         stT->SetColor(TEXT_DARK);
-        stT->SetFont(heavyFont);
+        stT->SetFont(mediumFont);
         this->Add(stT);
 
         y += std::max({lbl->GetHeight(), ivT->GetHeight(), evT->GetHeight(), stT->GetHeight()}) + 10;
@@ -317,7 +317,7 @@ void PokemonSummaryOverlay::Rebuild() {
     addStatRow(statY, "Speed", TEXT_DARK, pksm::Stat::SPD);
 
     const pu::i32 movesBoxX = rightX;
-    const pu::i32 movesBoxY = statsBoxY + statsBoxH + 20;
+    const pu::i32 movesBoxY = statsBoxY + statsBoxH + 65;
     auto movesHeader = pu::ui::elm::TextBlock::New(movesBoxX + 6, movesBoxY, "Moves");
     movesHeader->SetColor(TEXT_DARK);
     movesHeader->SetFont(heavyFont);
@@ -328,12 +328,12 @@ void PokemonSummaryOverlay::Rebuild() {
         const auto mv = this->pk->move(static_cast<u8>(i));
         auto bullet = pu::ui::elm::TextBlock::New(movesBoxX + 6, mvY, "-");
         bullet->SetColor(TEXT_DARK);
-        bullet->SetFont(heavyFont);
+        bullet->SetFont(mediumFont);
         this->Add(bullet);
 
         auto mvText = pu::ui::elm::TextBlock::New(movesBoxX + 30, mvY, LocalizeMove(lang, mv));
         mvText->SetColor(TEXT_DARK);
-        mvText->SetFont(heavyFont);
+        mvText->SetFont(mediumFont);
         this->Add(mvText);
         mvY += mvText->GetHeight() + 12;
     }

@@ -166,6 +166,62 @@ namespace pksm
         }
     }
 
+    void SavLGPE::finishEditing()
+    {
+        // LGPE uses compressed unified storage: occupied slots are contiguous
+        // from index 0 with no gaps. After any writes/clears, fix up the
+        // storage before resigning.
+
+        // 1. Invalidate party/follow references that point to now-empty slots
+        for (int i = 0; i < 6; i++)
+        {
+            u16 slot = partyBoxSlot(i);
+            if (slot != 1001 && slot < 1000)
+            {
+                u32 off = boxOffset(slot / 30, slot % 30);
+                if (!isPKM(&data[off]))
+                {
+                    partyBoxSlot(i, 1001);
+                }
+            }
+        }
+        u16 follow = followPkm();
+        if (follow != 1001 && follow < 1000)
+        {
+            u32 off = boxOffset(follow / 30, follow % 30);
+            if (!isPKM(&data[off]))
+            {
+                followPkm(1001);
+            }
+        }
+
+        // 2. Compact party slot list (eliminate gaps from invalidated entries)
+        fixParty();
+
+        // 3. Compress box storage (shift occupied slots forward to fill gaps,
+        //    updates party/follow pointers for any moved Pokemon)
+        compressBox();
+
+        // 4. Recount occupied slots (after compression they're contiguous from 0)
+        u16 count = 0;
+        for (u16 i = 0; i < 1000; i++)
+        {
+            u32 off = boxOffset(i / 30, i % 30);
+            if (isPKM(&data[off]))
+            {
+                count++;
+            }
+            else
+            {
+                break; // contiguous after compression
+            }
+        }
+        boxedPkm(count);
+
+        // 5. Resign checksums
+        resign();
+    }
+
     void SavLGPE::resign()
     {
         const u8 blockCount = 21;
@@ -312,6 +368,11 @@ namespace pksm
 
     std::unique_ptr<PKX> SavLGPE::pkm(u8 box, u8 slot) const
     {
+        u16 index = u16(box) * 30 + slot;
+        if (index >= 1000 || index >= boxedPkm())
+        {
+            return emptyPkm();
+        }
         return PKX::getPKM<Generation::LGPE>(&data[boxOffset(box, slot)], PB7::PARTY_LENGTH);
     }
 
@@ -324,7 +385,8 @@ namespace pksm
             {
                 trade(*pb7);
             }
-
+            // Box storage is PKX-encrypted per PKHeX convention
+            pb7->encrypt();
             std::ranges::copy(
                 pb7->rawData().subspan(0, PB7::PARTY_LENGTH), &data[boxOffset(box, slot)]);
         }
@@ -363,6 +425,7 @@ namespace pksm
             }
 
             auto pb7 = pk.partyClone();
+            pb7->encrypt();
             std::ranges::copy(pb7->rawData().subspan(0, PB7::PARTY_LENGTH), &data[off]);
             partyBoxSlot(slot, newSlot);
         }
@@ -648,7 +711,7 @@ namespace pksm
         {
             for (u8 slot = 0; slot < 30; slot++)
             {
-                if (box * 30 + slot > 1000)
+                if (box * 30 + slot >= 1000)
                 {
                     return;
                 }

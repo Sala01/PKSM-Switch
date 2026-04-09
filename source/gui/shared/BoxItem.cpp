@@ -1,6 +1,43 @@
 #include "gui/shared/components/BoxItem.hpp"
 
 #include "utils/Logger.hpp"
+#include "utils/SDLHelper.hpp"
+
+namespace {
+
+static constexpr const char* ICON_GENDER_MALE = "romfs:/gfx/ui/icon_gender_male.png";
+static constexpr const char* ICON_GENDER_FEMALE = "romfs:/gfx/ui/icon_gender_female.png";
+static constexpr const char* ICON_GENDER_NEUTRAL = "romfs:/gfx/ui/icon_gender_neutral.png";
+
+pu::sdl2::TextureHandle::Ref GetGenderIconTexture(const pksm::Gender gender) {
+    static pu::sdl2::TextureHandle::Ref male;
+    static pu::sdl2::TextureHandle::Ref female;
+    static pu::sdl2::TextureHandle::Ref neutral;
+
+    const auto loadOnce = [](pu::sdl2::TextureHandle::Ref& slot, const char* path) {
+        if (slot) {
+            return;
+        }
+        pu::sdl2::Texture tex = pu::ui::render::LoadImage(path);
+        if (tex) {
+            slot = pu::sdl2::TextureHandle::New(tex);
+        }
+    };
+
+    loadOnce(male, ICON_GENDER_MALE);
+    loadOnce(female, ICON_GENDER_FEMALE);
+    loadOnce(neutral, ICON_GENDER_NEUTRAL);
+
+    if (gender == pksm::Gender{pksm::Gender::Male}) {
+        return male;
+    }
+    if (gender == pksm::Gender{pksm::Gender::Female}) {
+        return female;
+    }
+    return neutral;
+}
+
+}  // namespace
 
 pksm::ui::BoxItem::BoxItem(
     const pu::i32 x,
@@ -36,7 +73,9 @@ pksm::ui::BoxItem::BoxItem(
     onTouchSelectCallback(nullptr),
     onSelectCallback(nullptr),
     touchHandler(),
-    buttonHandler() {
+    buttonHandler(),
+    genderIcon(nullptr),
+    gender(pksm::Gender{pksm::Gender::Genderless}) {
     static constexpr pu::i32 spriteOverscan = 12;
     const pu::i32 spriteWidth = width + spriteOverscan;
     const pu::i32 spriteHeight = height + spriteOverscan;
@@ -48,6 +87,16 @@ pksm::ui::BoxItem::BoxItem(
     background = pu::ui::elm::Rectangle::New(0, 0, width, height, defaultBgColor);
     this->image = pu::ui::elm::Image::New(spriteX, spriteY, image);
 
+    static constexpr pu::i32 genderIconSize = 26;
+    static constexpr pu::i32 genderIconMargin = 3;
+    static constexpr pu::i32 genderIconYOffset = 2;
+    const pu::i32 genderIconX = spriteX + spriteWidth - genderIconSize - genderIconMargin;
+    const pu::i32 genderIconY = genderIconMargin + genderIconYOffset;
+    this->genderIcon = pu::ui::elm::Image::New(genderIconX, genderIconY, nullptr);
+    this->genderIcon->SetWidth(genderIconSize);
+    this->genderIcon->SetHeight(genderIconSize);
+    this->genderIcon->SetVisible(false);
+
     // Set image dimensions to match container
     this->image->SetWidth(spriteWidth);
     this->image->SetHeight(spriteHeight);
@@ -55,6 +104,7 @@ pksm::ui::BoxItem::BoxItem(
     // Add elements to container
     container->Add(background);
     container->Add(this->image);
+    container->Add(this->genderIcon);
 
     // Create the regular outline
     outline = pksm::ui::RectangularOutline::New(
@@ -92,6 +142,21 @@ pksm::ui::BoxItem::BoxItem(
     // Set initial visibility
     outline->SetVisible(true);
     pulsingOutline->SetVisible(false);
+}
+
+void pksm::ui::BoxItem::SetGender(pksm::Gender newGender, bool visible) {
+    this->gender = newGender;
+    if (!genderIcon) {
+        return;
+    }
+    if (!visible) {
+        genderIcon->SetVisible(false);
+        genderIcon->SetImage(nullptr);
+        return;
+    }
+
+    genderIcon->SetVisible(true);
+    genderIcon->SetImage(GetGenderIconTexture(newGender));
 }
 
 void pksm::ui::BoxItem::SetWidth(const pu::i32 width) {

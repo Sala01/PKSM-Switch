@@ -6,9 +6,10 @@ namespace pksm::layout {
 
 StartupScreen::StartupScreen(
     std::function<void()> onTimeout,
+    std::function<void()> onSkip,
     std::function<void(pu::ui::Overlay::Ref)> onShowOverlay,
     std::function<void()> onHideOverlay
-) : BaseLayout(onShowOverlay, onHideOverlay), onTimeout(onTimeout), completed(false) {
+) : BaseLayout(onShowOverlay, onHideOverlay), onTimeout(onTimeout), onSkip(onSkip), completed(false) {
     
     // Set background color
     this->SetBackgroundColor(pu::ui::Color(20, 20, 30, 255));
@@ -83,6 +84,15 @@ void StartupScreen::OnHelpOverlayHidden() {
 }
 
 void StartupScreen::OnInput(u64 down, u64 up, u64 held) {
+    if ((down & HidNpadButton_A) != 0) {
+        if (!completed.load() && onSkip) {
+            onSkip();
+        } else {
+            Complete();
+        }
+        return;
+    }
+
     (void)down;
     (void)up;
     (void)held;

@@ -71,4 +71,6 @@ public:
     bool HasPendingWrites() const override;
     bool FlushPendingWrites() const override;
     void DiscardPendingWrites() const override;
+
+    [[nodiscard]] bool UsesTwentySlotBox(const pksm::saves::SaveData::Ref& saveData) const override;
 };

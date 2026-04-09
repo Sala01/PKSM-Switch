@@ -1,5 +1,6 @@
 #include "gui/screens/storage-screen/StorageScreen.hpp"
 
+#include <array>
 #include <ctime>
 
 #include "gui/screens/main-menu/sub-components/menu-grid/MenuButtonGrid.hpp"
@@ -10,7 +11,7 @@ namespace {
 pksm::ui::BoxPokemonData PkxToVisual(const pksm::PKX& pk) {
     const u16 form_u16 = pk.alternativeForm();
     const u8 form = form_u16 > 255 ? 0 : static_cast<u8>(form_u16);
-    return pksm::ui::BoxPokemonData(static_cast<u16>(pk.species()), form, pk.shiny());
+    return pksm::ui::BoxPokemonData(static_cast<u16>(pk.species()), form, pk.shiny(), pk.gender());
 }
 
 } // namespace
@@ -121,8 +122,53 @@ StorageScreen::StorageScreen(
             return;
         }
 
+        summaryCloneSource = pk->clone();
+        summaryCloneProvider = provider;
+        summaryCloneBoxIndex = boxIndex;
+        summaryCloneSlotIndex = slotIndex;
+        summaryCloneFromBank = (activeBox == ActiveBox::Bank);
+        summaryCloneVisual = slotData;
+
         auto overlay = pksm::ui::PokemonSummaryOverlay::New(0, 0, GetWidth(), GetHeight());
         overlay->SetPokemon(std::move(pk));
+        summaryOverlay = overlay;
+
+        auto cloneHintGlyph = pu::ui::elm::TextBlock::New(0, 0, pksm::ui::global::GetButtonGlyphString(pksm::ui::global::ButtonGlyph::X));
+        cloneHintGlyph->SetColor(pu::ui::Color(255, 255, 255, 255));
+        cloneHintGlyph->SetFont(pksm::ui::global::MakeSwitchButtonFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
+        auto cloneHintText = pu::ui::elm::TextBlock::New(0, 0, "Clone");
+        cloneHintText->SetColor(pu::ui::Color(255, 255, 255, 255));
+        cloneHintText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
+        auto releaseHintGlyph = pu::ui::elm::TextBlock::New(0, 0, pksm::ui::global::GetButtonGlyphString(pksm::ui::global::ButtonGlyph::Y));
+        releaseHintGlyph->SetColor(pu::ui::Color(255, 255, 255, 255));
+        releaseHintGlyph->SetFont(pksm::ui::global::MakeSwitchButtonFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
+        auto releaseHintText = pu::ui::elm::TextBlock::New(0, 0, "Release");
+        releaseHintText->SetColor(pu::ui::Color(255, 255, 255, 255));
+        releaseHintText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
+        static constexpr pu::i32 hintGap = 12;
+        const pu::i32 hintTotalW = cloneHintGlyph->GetWidth() + hintGap + cloneHintText->GetWidth();
+        const pu::i32 hintX = (GetWidth() - hintTotalW) / 2;
+        const pu::i32 hintY = (GetHeight() - std::max(cloneHintGlyph->GetHeight(), cloneHintText->GetHeight())) / 2 + 300;
+
+        cloneHintGlyph->SetX(hintX);
+        cloneHintGlyph->SetY(hintY);
+        cloneHintText->SetX(hintX + cloneHintGlyph->GetWidth() + hintGap);
+        cloneHintText->SetY(hintY);
+
+        releaseHintGlyph->SetX(hintX);
+        releaseHintGlyph->SetY(hintY + 75);
+        releaseHintText->SetX(hintX + releaseHintGlyph->GetWidth() + hintGap);
+        releaseHintText->SetY(hintY + 75);
+
+        overlay->Add(cloneHintGlyph);
+        overlay->Add(cloneHintText);
+        overlay->Add(releaseHintGlyph);
+        overlay->Add(releaseHintText);
+
         this->onShowOverlay(overlay);
         isSummaryOverlayVisible = true;
 
@@ -206,14 +252,23 @@ void StorageScreen::InitializePokemonBoxes() {
     pokemonSaveBox->SetName("PokemonSaveBox Element");
     pokemonSaveBox->EstablishOwningRelationship();
 
+    // Held Pokemon floating sprite (added after boxes so it renders on top)
+    heldPokemonImage = pu::ui::elm::Image::New(0, 0, nullptr);
+    heldPokemonImage->SetWidth(BOX_ITEM_SIZE + 12);
+    heldPokemonImage->SetHeight(BOX_ITEM_SIZE + 12);
+    heldPokemonImage->SetVisible(false);
+    this->Add(heldPokemonImage);
+
     // Load box data for both Bank and Save
     LoadBoxData();
 
     pokemonBankBox->SetOnSelectionChanged([this](int boxIndex, int slotIndex) {
         LOG_DEBUG("Bank box selection changed: Box " + std::to_string(boxIndex) + ", Slot " + std::to_string(slotIndex));
+        UpdateHeldPokemonImage();
     });
     pokemonSaveBox->SetOnSelectionChanged([this](int boxIndex, int slotIndex) {
         LOG_DEBUG("Save box selection changed: Box " + std::to_string(boxIndex) + ", Slot " + std::to_string(slotIndex));
+        UpdateHeldPokemonImage();
     });
 
     SetActiveBox(ActiveBox::Save);
@@ -226,6 +281,7 @@ void StorageScreen::LoadBoxData() {
 
     // reset Save Box data before loading new box data
     if (pokemonSaveBox) {
+        pokemonSaveBox->SetTwentySlotMode(false);
         pokemonSaveBox->SetBoxCount(0);
         pokemonSaveBox->SetCurrentBox(0);
     }
@@ -248,16 +304,18 @@ void StorageScreen::LoadBoxData() {
         LOG_DEBUG("No save data available, using fallback box data");
         // Set a default box count if no save data available
         if (pokemonSaveBox) {
+            pokemonSaveBox->SetTwentySlotMode(false);
             pokemonSaveBox->SetBoxCount(1);
             pksm::ui::BoxData emptyBox;
             emptyBox.name = "Box 1";
             pokemonSaveBox->SetBoxData(0, emptyBox);
-            // start at box 0
             pokemonSaveBox->SetCurrentBox(0);
         }
         LOG_DEBUG("Fallback box data loaded");
         return;
     }
+
+    pokemonSaveBox->SetTwentySlotMode(boxDataProvider->UsesTwentySlotBox(currentSave));
 
     const size_t boxCount = boxDataProvider->GetBoxCount(currentSave);
     LOG_DEBUG("Setting box count to " + std::to_string(boxCount));
@@ -275,10 +333,149 @@ void StorageScreen::LoadBoxData() {
 StorageScreen::~StorageScreen() = default;
 
 void StorageScreen::OnInput(u64 down, u64 up, u64 held) {
+    if (isReleaseConfirmVisible) {
+        if (down & HidNpadButton_B) {
+            onHideOverlay();
+            isReleaseConfirmVisible = false;
+            releaseConfirmOverlay = nullptr;
+
+            if (summaryOverlay) {
+                onShowOverlay(summaryOverlay);
+                isSummaryOverlayVisible = true;
+            }
+            return;
+        }
+
+        if ((down & HidNpadButton_A) && !heldPokemon.has_value() && summaryCloneProvider && summaryCloneBoxIndex >= 0 && summaryCloneSlotIndex >= 0) {
+            auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
+            summaryCloneProvider->ClearSlot(saveData, summaryCloneBoxIndex, summaryCloneSlotIndex);
+
+            pksm::ui::PokemonBox::Ref targetBox = summaryCloneFromBank ? pokemonBankBox : pokemonSaveBox;
+            if (targetBox) {
+                targetBox->SetPokemonData(summaryCloneBoxIndex, summaryCloneSlotIndex, pksm::ui::BoxPokemonData());
+            }
+
+            deferredWrites.clear();
+
+            onHideOverlay();
+            isReleaseConfirmVisible = false;
+            releaseConfirmOverlay = nullptr;
+            isSummaryOverlayVisible = false;
+            summaryOverlay = nullptr;
+
+            summaryCloneSource.reset();
+            summaryCloneProvider = nullptr;
+            summaryCloneBoxIndex = -1;
+            summaryCloneSlotIndex = -1;
+            summaryCloneFromBank = false;
+
+            SetActiveBox(activeBox);
+            UpdateHeldPokemonImage();
+            UpdateHelpFooter();
+            return;
+        }
+        return;
+    }
+
     if (isSummaryOverlayVisible) {
+        if ((down & HidNpadButton_X) && !heldPokemon.has_value() && summaryCloneSource && summaryCloneProvider && summaryCloneBoxIndex >= 0 && summaryCloneSlotIndex >= 0) {
+            heldPokemon = HeldPokemon{
+                summaryCloneSource->clone(),
+                summaryCloneProvider,
+                summaryCloneBoxIndex,
+                summaryCloneSlotIndex,
+                summaryCloneFromBank,
+                summaryCloneVisual,
+                true
+            };
+            deferredWrites.clear();
+
+            onHideOverlay();
+            isSummaryOverlayVisible = false;
+            summaryCloneSource.reset();
+            summaryCloneProvider = nullptr;
+            summaryCloneBoxIndex = -1;
+            summaryCloneSlotIndex = -1;
+            summaryCloneFromBank = false;
+
+            SetActiveBox(activeBox);
+            UpdateHeldPokemonImage();
+            UpdateHelpFooter();
+            return;
+        }
+
+        if ((down & HidNpadButton_Y) && !heldPokemon.has_value() && summaryCloneProvider && summaryCloneBoxIndex >= 0 && summaryCloneSlotIndex >= 0) {
+            onHideOverlay();
+            isSummaryOverlayVisible = false;
+
+            auto confirmOverlay = pu::ui::Overlay::New(0, 0, GetWidth(), GetHeight(), pu::ui::Color(0, 0, 0, 200));
+            confirmOverlay->SetRadius(0);
+            confirmOverlay->SetMaxFadeAlpha(200);
+            confirmOverlay->SetFadeAlphaVariation(18);
+
+            auto releaseConfirmText = pu::ui::elm::TextBlock::New(0, 0, "Are you sure you want to release this Pokemon?");
+            releaseConfirmText->SetColor(pu::ui::Color(255, 255, 255, 255));
+            releaseConfirmText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_TITLE));
+
+            auto aGlyph = pu::ui::elm::TextBlock::New(0, 0, pksm::ui::global::GetButtonGlyphString(pksm::ui::global::ButtonGlyph::A));
+            aGlyph->SetColor(pu::ui::Color(255, 255, 255, 255));
+            aGlyph->SetFont(pksm::ui::global::MakeSwitchButtonFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+            auto confirmText = pu::ui::elm::TextBlock::New(0, 0, "Confirm");
+            confirmText->SetColor(pu::ui::Color(255, 255, 255, 255));
+            confirmText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
+            auto bGlyph = pu::ui::elm::TextBlock::New(0, 0, pksm::ui::global::GetButtonGlyphString(pksm::ui::global::ButtonGlyph::B));
+            bGlyph->SetColor(pu::ui::Color(255, 255, 255, 255));
+            bGlyph->SetFont(pksm::ui::global::MakeSwitchButtonFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+            auto cancelText = pu::ui::elm::TextBlock::New(0, 0, "Cancel");
+            cancelText->SetColor(pu::ui::Color(255, 255, 255, 255));
+            cancelText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
+            const pu::i32 releaseConfirmX = (GetWidth() - releaseConfirmText->GetWidth()) / 2;
+            const pu::i32 releaseConfirmY = (GetHeight() - releaseConfirmText->GetHeight()) / 2;
+            releaseConfirmText->SetX(releaseConfirmX);
+            releaseConfirmText->SetY(releaseConfirmY);
+
+            static constexpr pu::i32 promptGap = 12;
+            static constexpr pu::i32 groupGap = 40;
+            const pu::i32 aGroupW = aGlyph->GetWidth() + promptGap + confirmText->GetWidth();
+            const pu::i32 bGroupW = bGlyph->GetWidth() + promptGap + cancelText->GetWidth();
+            const pu::i32 promptsW = aGroupW + groupGap + bGroupW;
+            const pu::i32 promptsX = (GetWidth() - promptsW) / 2;
+            const pu::i32 promptsY = releaseConfirmY + releaseConfirmText->GetHeight() + 40;
+
+            aGlyph->SetX(promptsX);
+            aGlyph->SetY(promptsY);
+            confirmText->SetX(promptsX + aGlyph->GetWidth() + promptGap);
+            confirmText->SetY(promptsY);
+
+            const pu::i32 bStartX = promptsX + aGroupW + groupGap;
+            bGlyph->SetX(bStartX);
+            bGlyph->SetY(promptsY);
+            cancelText->SetX(bStartX + bGlyph->GetWidth() + promptGap);
+            cancelText->SetY(promptsY);
+
+            confirmOverlay->Add(releaseConfirmText);
+            confirmOverlay->Add(aGlyph);
+            confirmOverlay->Add(confirmText);
+            confirmOverlay->Add(bGlyph);
+            confirmOverlay->Add(cancelText);
+
+            releaseConfirmOverlay = confirmOverlay;
+            onShowOverlay(confirmOverlay);
+            isReleaseConfirmVisible = true;
+            return;
+        }
+
         if (down & HidNpadButton_B) {
             onHideOverlay();
             isSummaryOverlayVisible = false;
+            summaryCloneSource.reset();
+            summaryCloneProvider = nullptr;
+            summaryCloneBoxIndex = -1;
+            summaryCloneSlotIndex = -1;
+            summaryCloneFromBank = false;
+            summaryOverlay = nullptr;
             SetActiveBox(activeBox);
         }
         return;
@@ -288,13 +485,22 @@ void StorageScreen::OnInput(u64 down, u64 up, u64 held) {
         return;
     }
 
+    constexpr u64 swapMask = HidNpadButton_ZL | HidNpadButton_ZR;
+    if (((held & swapMask) == swapMask) && ((down & swapMask) != 0)) {
+        if (!heldPokemon.has_value() && deferredWrites.empty()) {
+            SwapCurrentBoxes();
+        }
+        return;
+    }
+
     static constexpr int ITEMS_PER_ROW = 6;
     bool shouldHandleBoxSwitch = false;
 
     if (activeBox == ActiveBox::Save && pokemonSaveBox) {
         const int slotIndex = pokemonSaveBox->GetSelectedSlot();
         if (slotIndex >= 0) {
-            shouldHandleBoxSwitch = (slotIndex % ITEMS_PER_ROW) == 0;
+            const int edgeCol = pokemonSaveBox->GetTwentySlotMode() ? 1 : 0;
+            shouldHandleBoxSwitch = (slotIndex % ITEMS_PER_ROW) == edgeCol;
         }
     } else if (activeBox == ActiveBox::Bank && pokemonBankBox) {
         const int slotIndex = pokemonBankBox->GetSelectedSlot();
@@ -303,7 +509,6 @@ void StorageScreen::OnInput(u64 down, u64 up, u64 held) {
         }
     }
 
-    // process directional inputs for cross-box switching at the box edge
     if (shouldHandleBoxSwitch) {
         pokemonBoxDirectionalHandler.HandleInput(down, held);
     }
@@ -312,11 +517,97 @@ void StorageScreen::OnInput(u64 down, u64 up, u64 held) {
     buttonHandler.HandleInput(down, up, held);
 }
 
+void StorageScreen::SwapCurrentBoxes() {
+    if (!pokemonBankBox || !pokemonSaveBox || !bankBoxDataProvider || !boxDataProvider || !saveDataAccessor) {
+        return;
+    }
+
+    if (pokemonSaveBox->GetTwentySlotMode()) {
+        return;
+    }
+
+    auto saveData = saveDataAccessor->getCurrentSaveData();
+    if (!saveData) {
+        return;
+    }
+
+    const int bankBoxIndex = pokemonBankBox->GetCurrentBox();
+    const int saveBoxIndex = pokemonSaveBox->GetCurrentBox();
+    if (bankBoxIndex < 0 || saveBoxIndex < 0) {
+        return;
+    }
+
+    static constexpr int SLOTS_PER_BOX = 30;
+
+    struct PreparedSlot {
+        std::unique_ptr<pksm::PKX> toSave;
+        std::unique_ptr<pksm::PKX> toBank;
+    };
+
+    std::array<PreparedSlot, SLOTS_PER_BOX> prepared;
+
+    for (int slot = 0; slot < SLOTS_PER_BOX; slot++) {
+        auto bankPk = bankBoxDataProvider->GetPokemon(saveData, bankBoxIndex, slot);
+        auto savePk = boxDataProvider->GetPokemon(saveData, saveBoxIndex, slot);
+
+        if (bankPk) {
+            auto converted = boxDataProvider->PrepareForWrite(saveData, *bankPk);
+            if (!converted) {
+                return;
+            }
+            prepared[slot].toSave = std::move(converted);
+        }
+
+        if (savePk) {
+            auto converted = bankBoxDataProvider->PrepareForWrite(saveData, *savePk);
+            if (!converted) {
+                return;
+            }
+            prepared[slot].toBank = std::move(converted);
+        }
+    }
+
+    for (int slot = 0; slot < SLOTS_PER_BOX; slot++) {
+        if (prepared[slot].toSave) {
+            if (!boxDataProvider->WritePokemon(saveData, saveBoxIndex, slot, *prepared[slot].toSave)) {
+                return;
+            }
+            pokemonSaveBox->SetPokemonData(saveBoxIndex, slot, PkxToVisual(*prepared[slot].toSave));
+        } else {
+            boxDataProvider->ClearSlot(saveData, saveBoxIndex, slot);
+            pokemonSaveBox->SetPokemonData(saveBoxIndex, slot, pksm::ui::BoxPokemonData());
+        }
+
+        if (prepared[slot].toBank) {
+            if (!bankBoxDataProvider->WritePokemon(saveData, bankBoxIndex, slot, *prepared[slot].toBank)) {
+                return;
+            }
+            pokemonBankBox->SetPokemonData(bankBoxIndex, slot, PkxToVisual(*prepared[slot].toBank));
+        } else {
+            bankBoxDataProvider->ClearSlot(saveData, bankBoxIndex, slot);
+            pokemonBankBox->SetPokemonData(bankBoxIndex, slot, pksm::ui::BoxPokemonData());
+        }
+    }
+
+    if (pokemonSaveBox && boxDataProvider) {
+        auto saveBoxData = boxDataProvider->GetBoxData(saveData, saveBoxIndex);
+        pokemonSaveBox->SetBoxData(saveBoxIndex, saveBoxData);
+    }
+    if (pokemonBankBox && bankBoxDataProvider) {
+        auto bankBoxData = bankBoxDataProvider->GetBoxData(saveData, bankBoxIndex);
+        pokemonBankBox->SetBoxData(bankBoxIndex, bankBoxData);
+    }
+
+    UpdateHeldPokemonImage();
+}
+
 std::vector<pksm::ui::HelpItem> StorageScreen::GetHelpOverlayItems() const {
     return {
-        {{{pksm::ui::global::ButtonGlyph::A}}, "Select Pokémon"},
+        {{{pksm::ui::global::ButtonGlyph::A}}, "Place / Swap Pokémon"},
         {{{pksm::ui::global::ButtonGlyph::B}}, "Back to Main Menu"},
         {{{pksm::ui::global::ButtonGlyph::DPad}, {pksm::ui::global::ButtonGlyph::AnalogStick}}, "Navigate Box"},
+        {{{pksm::ui::global::ButtonGlyph::X}}, "Summary"},
+        {{{pksm::ui::global::ButtonGlyph::ZL}, {pksm::ui::global::ButtonGlyph::ZR}}, "Swap Boxes"},
         {{{pksm::ui::global::ButtonGlyph::L}}, "Previous Box"},
         {{{pksm::ui::global::ButtonGlyph::R}}, "Next Box"},
         {{{pksm::ui::global::ButtonGlyph::Minus}}, "Close Help"}
@@ -373,6 +664,7 @@ void StorageScreen::SetActiveBox(ActiveBox box) {
     }
 
     pokemonBoxDirectionalHandler.ClearState();
+    UpdateHeldPokemonImage();
 }
 
 void StorageScreen::PickUp() {
@@ -395,13 +687,14 @@ void StorageScreen::PickUp() {
 
     // Store held Pokemon with original source info and visually clear the source slot
     heldPokemon = HeldPokemon{
-        std::move(pk), provider, boxIndex, slotIndex, isBank, slotVisual
+        std::move(pk), provider, boxIndex, slotIndex, isBank, slotVisual, false
     };
     deferredWrites.clear();
     targetBox->SetPokemonData(boxIndex, slotIndex, pksm::ui::BoxPokemonData());
 
     LOG_DEBUG("Picked up Pokemon from " + std::string(isBank ? "Bank" : "Save") +
               " Box " + std::to_string(boxIndex) + " Slot " + std::to_string(slotIndex));
+    UpdateHeldPokemonImage();
     UpdateHelpFooter();
 }
 
@@ -472,7 +765,7 @@ void StorageScreen::PlaceDown() {
                 }
             }
         }
-        if (!originalCovered) {
+        if (!originalCovered && !heldPokemon->isClone) {
             heldPokemon->originalProvider->ClearSlot(
                 saveData, heldPokemon->originalBox, heldPokemon->originalSlot);
         }
@@ -491,6 +784,7 @@ void StorageScreen::PlaceDown() {
 
         deferredWrites.clear();
         heldPokemon.reset();
+        UpdateHeldPokemonImage();
         UpdateHelpFooter();
 
     } else {
@@ -545,6 +839,9 @@ void StorageScreen::PlaceDown() {
             heldPokemon->pkx = std::move(displaced);
         }
 
+        // Update held sprite (held Pokemon changed after swap)
+        UpdateHeldPokemonImage();
+
         LOG_DEBUG("Carry-swap at " + std::string(destIsBank ? "Bank" : "Save") +
                   " Box " + std::to_string(destBoxIndex) +
                   " Slot " + std::to_string(destSlotIndex) +
@@ -573,7 +870,34 @@ void StorageScreen::CancelPickUp() {
     LOG_DEBUG("Cancelled pick-up, restored " + std::to_string(deferredWrites.size()) + " deferred writes");
     deferredWrites.clear();
     heldPokemon.reset();
+    UpdateHeldPokemonImage();
     UpdateHelpFooter();
+}
+
+void StorageScreen::UpdateHeldPokemonImage() {
+    if (!heldPokemonImage) return;
+
+    if (!heldPokemon.has_value()) {
+        heldPokemonImage->SetVisible(false);
+        return;
+    }
+
+    // Update sprite to match the currently held Pokemon (may change after carry-swap)
+    auto visual = PkxToVisual(*heldPokemon->pkx);
+    heldPokemonImage->SetImage(visual.getSprite());
+    heldPokemonImage->SetWidth(BOX_ITEM_SIZE + 12);
+    heldPokemonImage->SetHeight(BOX_ITEM_SIZE + 12);
+
+    // Position at the currently selected slot in the active box
+    auto targetBox = (activeBox == ActiveBox::Bank) ? pokemonBankBox : pokemonSaveBox;
+    if (targetBox) {
+        auto [sx, sy] = targetBox->GetSelectedSlotScreenPosition();
+        // Offset by -6 to match BoxItem's spriteOverscan centering
+        heldPokemonImage->SetX(sx - 20);
+        heldPokemonImage->SetY(sy - 20);
+    }
+
+    heldPokemonImage->SetVisible(true);
 }
 
 void StorageScreen::UpdateHelpFooter() {
@@ -585,7 +909,6 @@ void StorageScreen::UpdateHelpFooter() {
             {{{pksm::ui::global::ButtonGlyph::A}}, "Place / Swap"},
             {{{pksm::ui::global::ButtonGlyph::B}}, "Cancel"},
             {{{pksm::ui::global::ButtonGlyph::L}, {pksm::ui::global::ButtonGlyph::R}}, "Switch Box"},
-            {{{pksm::ui::global::ButtonGlyph::DPad}}, "Navigate Box"},
         };
     } else {
         helpItems = {
@@ -593,7 +916,7 @@ void StorageScreen::UpdateHelpFooter() {
             {{{pksm::ui::global::ButtonGlyph::B}}, "Back to Main Menu"},
             {{{pksm::ui::global::ButtonGlyph::X}}, "Summary"},
             {{{pksm::ui::global::ButtonGlyph::L}, {pksm::ui::global::ButtonGlyph::R}}, "Switch Box"},
-            {{{pksm::ui::global::ButtonGlyph::DPad}}, "Navigate Box"},
+            {{{pksm::ui::global::ButtonGlyph::ZL}, {pksm::ui::global::ButtonGlyph::ZR}}, "Swap Boxes"},
         };
     }
     helpFooter->SetHelpItems(helpItems);

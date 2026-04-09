@@ -29,6 +29,7 @@ private:
     // State
     bool focused = false;
     bool selected = false;
+    bool twentySlotMode = false;
 
     // Current box data
     BoxData currentBoxData;
@@ -96,6 +97,12 @@ public:
     // Additional focus/selection methods
     void EstablishOwningRelationship();
 
+    void SetTwentySlotMode(bool on) { twentySlotMode = on; }
+    [[nodiscard]] bool GetTwentySlotMode() const { return twentySlotMode; }
+
+    void MoveLeft() override;
+    void MoveRight() override;
+
     // Set the data for a specific Pokémon slot
     void SetPokemonData(int slotIndex, const BoxPokemonData& data);
 
@@ -114,6 +121,9 @@ public:
 
     // Get current selection
     size_t GetSelectedIndex() const { return selectedIndex; }
+
+    // Get the screen position of the currently selected slot
+    std::pair<pu::i32, pu::i32> GetSelectedSlotPosition() const;
 
     bool ShouldResignUpFocus() const { return IsInFirstRow(selectedIndex); }
     bool ShouldResignDownFocus() const { return IsInLastRow(selectedIndex); }

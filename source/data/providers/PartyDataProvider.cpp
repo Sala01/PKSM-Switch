@@ -10,7 +10,8 @@
 namespace {
 std::unique_ptr<pksm::Sav> LoadSavFromPath(const std::string& saveName) {
     const bool isSaveDevicePath = saveName.rfind("save:/", 0) == 0;
-    const std::string path = isSaveDevicePath ? saveName : (std::string("save:/") + saveName);
+    const bool isAbsoluteDevicePath = (saveName.find(":/") != std::string::npos);
+    const std::string path = (isSaveDevicePath || isAbsoluteDevicePath) ? saveName : (std::string("save:/") + saveName);
 
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.good()) throw std::runtime_error("open failed");
@@ -32,14 +33,18 @@ bool PersistSave(pksm::Sav* sav, const std::string& saveName) {
     try {
         sav->finishEditing();
         const bool isSaveDevicePath = saveName.rfind("save:/", 0) == 0;
-        const std::string path = isSaveDevicePath ? saveName : (std::string("save:/") + saveName);
+        const bool isAbsoluteDevicePath = (saveName.find(":/") != std::string::npos);
+        const std::string path = (isSaveDevicePath || isAbsoluteDevicePath) ? saveName : (std::string("save:/") + saveName);
         const size_t outSize = static_cast<size_t>(sav->getEntireLengthIncludingFooter());
         std::ofstream file(path, std::ios::binary | std::ios::trunc);
         if (!file.good()) { sav->beginEditing(); return false; }
         file.write(reinterpret_cast<const char*>(sav->rawData().get()), static_cast<std::streamsize>(outSize));
         file.flush();
         file.close();
-        const Result rc = fsdevCommitDevice("save");
+        Result rc = 0;
+        if (isSaveDevicePath) {
+            rc = fsdevCommitDevice("save");
+        }
         sav->beginEditing();
         if (R_FAILED(rc)) return false;
         return true;
@@ -52,7 +57,7 @@ bool PersistSave(pksm::Sav* sav, const std::string& saveName) {
 pksm::ui::BoxPokemonData PkxToVisual(const pksm::PKX& pk) {
     const u16 form_u16 = pk.alternativeForm();
     const u8 form = form_u16 > 255 ? 0 : static_cast<u8>(form_u16);
-    return pksm::ui::BoxPokemonData(static_cast<u16>(pk.species()), form, pk.shiny());
+    return pksm::ui::BoxPokemonData(static_cast<u16>(pk.species()), form, pk.shiny(), pk.gender());
 }
 } // namespace
 

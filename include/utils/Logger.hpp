@@ -26,6 +26,7 @@ namespace pksm::utils
         static void LogMemoryInfo();
 
         static int OUTPUT_TO_FILE;
+        static int ADVANCED_LOGGING;
 
     private:
         static void Log(Level level, const std::string &message);
