@@ -26,6 +26,7 @@
 
 #include "sav/SavPLA.hpp"
 #include "pkx/PA8.hpp"
+#include "sav/Item.hpp"
 #include "utils/endian.hpp"
 #include "utils/i18n.hpp"
 #include "utils/utils.hpp"
@@ -35,6 +36,84 @@
 
 namespace pksm
 {
+    constexpr int normalItems[] = {
+        17, 23, 24, 25, 26, 27, 28, 29, 39, 41,
+        50, 54, 72, 73, 75, 80, 81, 82, 83, 84,
+        85, 90, 91, 92, 107, 108, 109, 110, 149, 150,
+        151, 152, 153, 154, 155, 157, 158, 159, 160, 161,
+        162, 163, 164, 166, 168, 233, 252, 321, 322, 323,
+        324, 325, 326, 327, 583,      849,
+
+        1125, 1126, 1127, 1128, 1231, 1232, 1233, 1234, 1235, 1236,
+        1237, 1238, 1239, 1240, 1241, 1242, 1243, 1244, 1245, 1246,
+        1247, 1248, 1249, 1250, 1251,
+
+        1611, 1613, 1614, 1615, 1616, 1617, 1618, 1619, 1620, 1621,
+        1628, 1630, 1631, 1632, 1633, 1634, 1635, 1636, 1637, 1638,
+        1651, 1679, 1681, 1682, 1684, 1686, 1687, 1688, 1689, 1690,
+        1691, 1692, 1693, 1694, 1695, 1696, 1699, 1700, 1701, 1702,
+        1703, 1704, 1705, 1706, 1707, 1708, 1709, 1710, 1711, 1712,
+        1713, 1716, 1717, 1720, 1724, 1725, 1726, 1727, 1728, 1732,
+        1733, 1734, 1735, 1736, 1738, 1739, 1740, 1741, 1742, 1746,
+        1747, 1748, 1749, 1750, 1754, 1755, 1756, 1757, 1758, 1759,
+        1760, 1761, 1762, 1764, 1785,
+    };
+
+    constexpr int keyItems[] = {
+        111,
+        298, 299,
+        300, 301, 302, 303, 304, 305, 306, 307, 308, 309,
+        310, 311, 312, 313,
+        441, 455, 466,
+        632, 638, 644,
+        1608, 1609, 1610, 1612, 1622, 1624, 1625, 1626, 1627, 1629,
+        1639, 1678, 1721, 1722, 1723, 1737, 1743, 1744, 1745, 1763,
+        1765, 1766, 1767, 1768, 1769, 1771, 1776, 1777, 1778, 1779,
+        1780, 1782, 1786, 1787, 1788, 1789, 1790, 1792, 1793, 1794,
+        1795, 1796, 1797, 1798, 1799, 1800, 1801, 1802, 1803, 1804,
+        1805, 1806, 1807,
+        1828,
+    };
+
+    constexpr int pcItems[] = {
+        17, 23, 24, 25, 26, 27, 28, 29, 39, 41,
+        50, 54, 72, 73, 75, 80, 81, 82, 83, 84,
+        85, 90, 91, 92, 107, 108, 109, 110, 149, 150,
+        151, 152, 153, 154, 155, 157, 158, 159, 160, 161,
+        162, 163, 164, 166, 168, 233, 252, 321, 322, 323,
+        324, 325, 326, 327, 583,      849,
+
+        1125, 1126, 1127, 1128, 1231, 1232, 1233, 1234, 1235, 1236,
+        1237, 1238, 1239, 1240, 1241, 1242, 1243, 1244, 1245, 1246,
+        1247, 1248, 1249, 1250, 1251,
+
+        1611, 1613, 1614, 1615, 1616, 1617, 1618, 1619, 1620, 1621,
+        1628, 1630, 1631, 1632, 1633, 1634, 1635, 1636, 1637, 1638,
+        1651, 1679, 1681, 1682, 1684, 1686, 1687, 1688, 1689, 1690,
+        1691, 1692, 1693, 1694, 1695, 1696, 1699, 1700, 1701, 1702,
+        1703, 1704, 1705, 1706, 1707, 1708, 1709, 1710, 1711, 1712,
+        1713, 1716, 1717, 1720, 1724, 1725, 1726, 1727, 1728, 1732,
+        1733, 1734, 1735, 1736, 1738, 1739, 1740, 1741, 1742, 1746,
+        1747, 1748, 1749, 1750, 1754, 1755, 1756, 1757, 1758, 1759,
+        1760, 1761, 1762, 1764, 1785,
+    };
+
+    std::span<const int> itemListForPouch(pksm::Sav::Pouch pouch)
+    {
+        using P = pksm::Sav::Pouch;
+        switch (pouch)
+        {
+            case P::NormalItem:
+                return normalItems;
+            case P::KeyItem:
+                return keyItems;
+            case P::PCItem:
+                return pcItems;
+            default:
+                return {};
+        }
+    }
+
     SavPLA::SavPLA(const std::shared_ptr<u8[]>& dt, size_t length) : Sav8(dt, length)
     {
         game      = Game::PLA;
@@ -179,24 +258,56 @@ namespace pksm
 
     void SavPLA::item(const Item& item, Pouch pouch, u16 slot)
     {
-        (void)item;
-        (void)pouch;
-        (void)slot;
+        auto write = item.bytes();
+        switch (pouch)
+        {
+            case Pouch::NormalItem:
+                std::copy(write.begin(), write.end(), getBlock(KItems)->decryptedData() + 4 * slot);
+                break;
+            case Pouch::KeyItem:
+                std::copy(write.begin(), write.end(),
+                    getBlock(KItemsKey)->decryptedData() + 4 * slot);
+                break;
+            case Pouch::PCItem:
+                std::copy(write.begin(), write.end(),
+                    getBlock(KItemsStored)->decryptedData() + 4 * slot);
+                break;
+            default:
+                break;
+        }
     }
 
-    std::unique_ptr<Item> SavPLA::item(Pouch, u16) const
+    std::unique_ptr<Item> SavPLA::item(Pouch pouch, u16 slot) const
     {
-        return nullptr;
+        switch (pouch)
+        {
+            case Pouch::NormalItem:
+                return std::make_unique<Item8a>(getBlock(KItems)->decryptedData() + 4 * slot);
+            case Pouch::KeyItem:
+                return std::make_unique<Item8a>(getBlock(KItemsKey)->decryptedData() + 4 * slot);
+            case Pouch::PCItem:
+                return std::make_unique<Item8a>(getBlock(KItemsStored)->decryptedData() + 4 * slot);
+            default:
+                return std::make_unique<Item8a>();
+        }
     }
 
     SmallVector<std::pair<Sav::Pouch, int>, 15> SavPLA::pouches(void) const
     {
-        return {};
+        return {
+            std::pair{Pouch::NormalItem, 675},
+            std::pair{Pouch::KeyItem,    100},
+            std::pair{Pouch::PCItem,     180},
+        };
     }
 
     SmallVector<std::pair<Sav::Pouch, std::span<const int>>, 15> SavPLA::validItems(void) const
     {
-        return {};
+        return {
+            std::pair{Pouch::NormalItem, std::span<const int>(normalItems)},
+            std::pair{Pouch::KeyItem,    std::span<const int>(keyItems)},
+            std::pair{Pouch::PCItem,    std::span<const int>(pcItems)},
+        };
     }
 
     u8 SavPLA::currentBox() const
@@ -310,7 +421,8 @@ namespace pksm
             {
                 trade(*pa8);
             }
-            // Box storage uses stored size (0x168)
+            // Box storage uses stored size (0x168), PKX-encrypted per PKHeX convention
+            pa8->encrypt();
             std::ranges::copy(pa8->rawData().subspan(0, PA8::BOX_LENGTH),
                 getBlock(Box)->decryptedData() + boxOffset(box, slot));
         }

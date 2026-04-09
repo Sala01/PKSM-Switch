@@ -78,7 +78,7 @@ MainMenu::MainMenu(
     this->Add(versionBackground);
     
     versionText = pu::ui::elm::TextBlock::New(
-        GetWidth() - VERSION_IMAGE_WIDTH + VERSION_IMAGE_PADDING,
+        GetWidth() - VERSION_IMAGE_WIDTH + VERSION_IMAGE_PADDING + 300,
         VERSION_IMAGE_TOP_MARGIN + (VERSION_IMAGE_HEIGHT / 2) - 14,
         versionString
     );
@@ -95,10 +95,9 @@ MainMenu::MainMenu(
 
     // Set initial help items
     std::vector<pksm::ui::HelpItem> helpItems = {
-        {{{pksm::ui::global::ButtonGlyph::A}}, "Select"},
-        {{{pksm::ui::global::ButtonGlyph::Y}}, "Save"},
+        {{{pksm::ui::global::ButtonGlyph::A}}, "Select Highlighted"},
         {{{pksm::ui::global::ButtonGlyph::B}}, "Back to Game Selection"},
-        {{{pksm::ui::global::ButtonGlyph::Minus}}, "Help"}
+        {{{pksm::ui::global::ButtonGlyph::Y}}, "Save"},
     };
     helpFooter->SetHelpItems(helpItems);
 
@@ -368,6 +367,7 @@ std::vector<pksm::ui::HelpItem> MainMenu::GetHelpOverlayItems() const {
     return {
         {{{pksm::ui::global::ButtonGlyph::A}}, "Select Highlighted"},
         {{{pksm::ui::global::ButtonGlyph::B}}, "Back to Game Selection"},
+        {{{pksm::ui::global::ButtonGlyph::Y}}, "Save"},
         {{{pksm::ui::global::ButtonGlyph::DPad}}, "Navigate"},
         {{{pksm::ui::global::ButtonGlyph::Minus}}, "Close Help"}
     };

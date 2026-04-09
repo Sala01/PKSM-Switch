@@ -1,19 +1,32 @@
 #include "gui/screens/settings-screen/SettingsScreen.hpp"
 #include "gui/shared/UIConstants.hpp"
 #include "utils/Logger.hpp"
+#include "utils/SettingsManager.hpp"
+#include "utils/NotificationManager.hpp"
+#include <iomanip>
+#include <sstream>
 
 namespace pksm::layout {
 
 SettingsScreen::SettingsScreen(
     std::function<void()> onBack,
     std::function<void(pu::ui::Overlay::Ref)> onShowOverlay,
-    std::function<void()> onHideOverlay
+    std::function<void()> onHideOverlay,
+    std::function<void()> onShowEmulatorConfig
 )
   : BaseLayout(onShowOverlay, onHideOverlay),
     onBack(onBack),
-    buttonHandler() {
+    onShowEmulatorConfig(onShowEmulatorConfig),
+    buttonHandler(),
+    settingsManager(nullptr) {
     
     LOG_DEBUG("Initializing SettingsScreen...");
+
+    // Initialize settings manager and store reference
+    settingsManager = &pksm::utils::SettingsManager::getInstance();
+    if (!settingsManager->initialize()) {
+        LOG_WARNING("Failed to initialize settings manager, using defaults");
+    }
 
     this->SetBackgroundColor(bgColor);
     background = ui::AnimatedBackground::New();
@@ -33,47 +46,29 @@ SettingsScreen::SettingsScreen(
 
     CreateSettingButton(
         "Language",
-        "English",
+        settingsManager->getString("language", "English"),
         currentY,
-        []() { LOG_DEBUG("Language setting clicked"); }
+        [this]() { 
+            LOG_DEBUG("Language setting clicked");
+            pksm::utils::NotificationManager::Push("Settings", "Language selection coming soon (i18n needed)");
+        }
     );
     currentY += BUTTON_HEIGHT + BUTTON_SPACING;
 
     CreateSettingButton(
-        "Auto-save",
-        "Enabled",
+        "Backup Save",
+        settingsManager->getBool("backup_save", true) ? "Enabled" : "Disabled",
         currentY,
-        []() { LOG_DEBUG("Auto-save setting clicked"); }
+        [this]() { 
+            LOG_DEBUG("Backup Save setting clicked");
+            bool current = settingsManager->getBool("backup_save", true);
+            settingsManager->setBool("backup_save", !current);
+            settingsManager->save();
+            UpdateSettingButtonText("Backup Save", !current ? "Enabled" : "Disabled");
+            pksm::utils::NotificationManager::Push("Settings", std::string("Backup Save on Load ") + (!current ? "enabled." : "disabled."));
+        }
     );
     currentY += BUTTON_HEIGHT + BUTTON_SPACING;
-
-    // Appearance Section
-    CreateSectionHeader("Appearance", currentY);
-    currentY += SECTION_SPACING;
-
-    CreateSettingButton(
-        "Theme",
-        "Dark",
-        currentY,
-        []() { LOG_DEBUG("Theme setting clicked"); }
-    );
-    currentY += BUTTON_HEIGHT + BUTTON_SPACING;
-
-    CreateSettingButton(
-        "Font Size",
-        "Medium",
-        currentY,
-        []() { LOG_DEBUG("Font size setting clicked"); }
-    );
-    currentY += BUTTON_HEIGHT + BUTTON_SPACING;
-
-    CreateSettingButton(
-        "Animation Speed",
-        "Normal",
-        currentY,
-        []() { LOG_DEBUG("Animation speed setting clicked"); }
-    );
-    currentY += BUTTON_HEIGHT + BUTTON_SPACING + SECTION_SPACING;
 
     // Advanced Section
     CreateSectionHeader("Advanced", currentY);
@@ -81,18 +76,70 @@ SettingsScreen::SettingsScreen(
 
     CreateSettingButton(
         "Debug Mode",
-        "Disabled",
+        settingsManager->getBool("debug_mode", false) ? "Enabled" : "Disabled",
         currentY,
-        []() { LOG_DEBUG("Debug mode setting clicked"); }
+        [this]() { 
+            LOG_DEBUG("Debug mode setting clicked");
+            bool current = settingsManager->getBool("debug_mode", false);
+            settingsManager->setBool("debug_mode", !current);
+            settingsManager->save();
+            UpdateSettingButtonText("Debug Mode", !current ? "Enabled" : "Disabled");
+            pksm::utils::NotificationManager::Push("Settings", 
+                std::string("Debug mode ") + (!current ? "enabled" : "disabled"));
+        }
     );
     currentY += BUTTON_HEIGHT + BUTTON_SPACING;
 
+    size_t cacheSize = settingsManager->getCacheSize();
+    std::string cacheSizeText;
+    if (cacheSize == 0) {
+        cacheSizeText = "Empty";
+    } else {
+        std::ostringstream oss;
+        if (cacheSize < 1024) {
+            oss << cacheSize << " B";
+        } else if (cacheSize < 1024 * 1024) {
+            oss << std::fixed << std::setprecision(1) << (cacheSize / 1024.0) << " KB";
+        } else {
+            oss << std::fixed << std::setprecision(1) << (cacheSize / (1024.0 * 1024.0)) << " MB";
+        }
+        cacheSizeText = oss.str();
+    }
+
     CreateSettingButton(
         "Clear Cache",
-        "45.2 MB",
+        cacheSizeText,
         currentY,
-        []() { LOG_DEBUG("Clear cache setting clicked"); }
+        [this]() { 
+            LOG_DEBUG("Clear cache setting clicked");
+            if (settingsManager->clearCache()) {
+                RefreshCacheSize();
+                pksm::utils::NotificationManager::Push("Settings", "Cache cleared successfully.");
+            } else {
+                pksm::utils::NotificationManager::Push("Settings", "Failed to clear cache.");
+            }
+        }
     );
+    currentY += BUTTON_HEIGHT + BUTTON_SPACING;
+
+    // Reconfigure Section
+    CreateSectionHeader("Reconfigure", currentY);
+    currentY += SECTION_SPACING;
+
+    CreateSettingButton(
+        "Reconfigure Emulator Saves",
+        "",
+        currentY,
+        [this, onShowEmulatorConfig]() { 
+            LOG_DEBUG("Reconfigure emulator saves setting clicked");
+            if (onShowEmulatorConfig) {
+                onShowEmulatorConfig();
+            } else {
+                pksm::utils::NotificationManager::Push("Settings", "Emulator configuration not available.");
+            }
+        }
+    );
+    currentY += BUTTON_HEIGHT + BUTTON_SPACING;
 
     // Initialize focus manager
     focusManager = pksm::input::FocusManager::New("SettingsScreen Manager");
@@ -233,6 +280,39 @@ void SettingsScreen::OnHelpOverlayHidden() {
         button->SetVisible(true);
     }
     headerText->SetVisible(true);
+}
+
+void SettingsScreen::UpdateSettingButtonText(const std::string& label, const std::string& newValue) {
+    for (auto& button : settingButtons) {
+        std::string currentText = button->GetContent();
+        size_t colonPos = currentText.find(": ");
+        if (colonPos != std::string::npos) {
+            std::string currentLabel = currentText.substr(0, colonPos);
+            if (currentLabel == label) {
+                button->SetContent(label + ": " + newValue);
+                break;
+            }
+        }
+    }
+}
+
+void SettingsScreen::RefreshCacheSize() {
+    size_t cacheSize = settingsManager->getCacheSize();
+    std::string cacheSizeText;
+    if (cacheSize == 0) {
+        cacheSizeText = "Empty";
+    } else {
+        std::ostringstream oss;
+        if (cacheSize < 1024) {
+            oss << cacheSize << " B";
+        } else if (cacheSize < 1024 * 1024) {
+            oss << std::fixed << std::setprecision(1) << (cacheSize / 1024.0) << " KB";
+        } else {
+            oss << std::fixed << std::setprecision(1) << (cacheSize / (1024.0 * 1024.0)) << " MB";
+        }
+        cacheSizeText = oss.str();
+    }
+    UpdateSettingButtonText("Clear Cache", cacheSizeText);
 }
 
 }  // namespace pksm::layout

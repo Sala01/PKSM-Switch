@@ -6,7 +6,24 @@
 #include <unistd.h>
 #include "utils/Logger.hpp"
 
+#include "data/emulator/EmulatorGameCatalog.hpp"
+#include "data/emulator/EmulatorSaveConfig.hpp"
+
 using namespace pksm;
+
+namespace {
+
+bool PathExists(const std::string& path) {
+    std::error_code ec;
+    return std::filesystem::exists(std::filesystem::path(path), ec) && !ec;
+}
+
+bool IsRegularFile(const std::string& path) {
+    std::error_code ec;
+    return std::filesystem::is_regular_file(std::filesystem::path(path), ec) && !ec;
+}
+
+}
 
 SaveDataProvider::SaveDataProvider(const AccountUid& initialUserId) 
     : initialUserId(initialUserId), titlesLoaded(false) {
@@ -294,6 +311,36 @@ std::vector<pksm::saves::Save::Ref> SaveDataProvider::GetSavesForTitle(
     
     LOG_DEBUG("GetSavesForTitle: Looking for saves for title: " + title->getName() + " (ID: " + std::to_string(title->getTitleId()) + ")");
     
+    const auto catalog = pksm::data::emulator::EmulatorGameCatalog::LoadFromDataJson(JSON_PATH);
+    const auto emuGame = pksm::data::emulator::EmulatorGameCatalog::FindByTitleId(catalog, title->getTitleId());
+    if (emuGame.has_value()) {
+        std::vector<std::string> emuPaths;
+        emuPaths.insert(emuPaths.end(), emuGame->saveProbes.begin(), emuGame->saveProbes.end());
+
+        const auto cfg = pksm::data::emulator::EmulatorSaveConfig::Load();
+        const auto it = cfg.find(title->getTitleId());
+        if (it != cfg.end()) {
+            emuPaths.insert(emuPaths.end(), it->second.primary.begin(), it->second.primary.end());
+            for (const auto& kv : it->second.extra) {
+                emuPaths.insert(emuPaths.end(), kv.second.begin(), kv.second.end());
+            }
+        }
+
+        std::vector<pksm::saves::Save::Ref> saves;
+        saves.reserve(emuPaths.size());
+
+        for (const auto& p : emuPaths) {
+            if (!PathExists(p)) {
+                continue;
+            }
+            if (IsRegularFile(p)) {
+                saves.push_back(pksm::saves::Save::New(p, p, *currentUser));
+            }
+        }
+
+        return saves;
+    }
+    
     // Find the main save file for this title
     auto installedTitles = LoadInstalledTitles();
     LOG_DEBUG("GetSavesForTitle: Checking against " + std::to_string(installedTitles.size()) + " installed titles");
@@ -301,10 +348,6 @@ std::vector<pksm::saves::Save::Ref> SaveDataProvider::GetSavesForTitle(
     for (const auto& [installedTitle, mainSaveFile] : installedTitles) {
         if (installedTitle->getTitleId() == title->getTitleId()) {
             LOG_DEBUG("GetSavesForTitle: Found matching title, main save file: " + (mainSaveFile.empty() ? "none" : mainSaveFile));
-            // Use fast check first to avoid unnecessary operations
-            if (!mainSaveFile.empty() && !FastSaveCheck(title, *currentUser, mainSaveFile)) {
-                LOG_DEBUG("GetSavesForTitle: Fast save check failed, falling back to full scan");
-            }
             auto saves = ScanSavesForTitle(title, *currentUser, mainSaveFile);
             LOG_DEBUG("GetSavesForTitle: ScanSavesForTitle returned " + std::to_string(saves.size()) + " saves");
             return saves;

@@ -27,6 +27,7 @@ pksm::layout::TitleLoadScreen::TitleLoadScreen(
     std::function<void(pu::ui::Overlay::Ref)> onShowOverlay,
     std::function<void()> onHideOverlay,
     std::function<void()> onExitRequested,
+    std::function<void()> onReconfigureEmuSaves,
     std::function<void(pksm::titles::Title::Ref, pksm::saves::Save::Ref)> onSaveLoaded
 )
   : BaseLayout(onShowOverlay, onHideOverlay),
@@ -34,7 +35,8 @@ pksm::layout::TitleLoadScreen::TitleLoadScreen(
     saveProvider(saveProvider),
     accountManager(accountManager),
     onSaveLoaded(onSaveLoaded),
-    onExitRequested(std::move(onExitRequested)) {
+    onExitRequested(std::move(onExitRequested)),
+    onReconfigureEmuSaves(std::move(onReconfigureEmuSaves)) {
     LOG_DEBUG("Initializing TitleLoadScreen...");
     this->SetBackgroundColor(pksm::ui::global::BACKGROUND_BLUE);
 
@@ -215,16 +217,16 @@ void pksm::layout::TitleLoadScreen::LoadSaves() {
 
         // Update save list with current user
         LOG_DEBUG("Getting saves for current user");
-        auto saves = saveProvider->GetSavesForTitle(title, accountManager.GetCurrentAccount());
-        LOG_DEBUG("Found " + std::to_string(saves.size()) + " saves for title");
-        
+        cachedSaves = saveProvider->GetSavesForTitle(title, accountManager.GetCurrentAccount());
+        LOG_DEBUG("Found " + std::to_string(cachedSaves.size()) + " saves for title");
+
         // Log each save found
-        for (size_t i = 0; i < saves.size(); i++) {
-            LOG_DEBUG("Save " + std::to_string(i) + ": " + saves[i]->getName() + " at " + saves[i]->getPath());
+        for (size_t i = 0; i < cachedSaves.size(); i++) {
+            LOG_DEBUG("Save " + std::to_string(i) + ": " + cachedSaves[i]->getName() + " at " + cachedSaves[i]->getPath());
         }
-        
-        this->saveList->SetDataSource(saves);
-        LOG_DEBUG("Set save list data source with " + std::to_string(saves.size()) + " items");
+
+        this->saveList->SetDataSource(cachedSaves);
+        LOG_DEBUG("Set save list data source with " + std::to_string(cachedSaves.size()) + " items");
     } else {
         LOG_DEBUG("No title selected, cannot load saves");
     }
@@ -243,11 +245,8 @@ pksm::titles::Title::Ref pksm::layout::TitleLoadScreen::GetSelectedTitle() const
 
 pksm::saves::Save::Ref pksm::layout::TitleLoadScreen::GetSelectedSave() const {
     int selectedIndex = this->saveList->GetSelectedIndex();
-    if (selectedIndex >= 0) {
-        auto saves = saveProvider->GetSavesForTitle(GetSelectedTitle(), accountManager.GetCurrentAccount());
-        if (selectedIndex < static_cast<int>(saves.size())) {
-            return saves[selectedIndex];
-        }
+    if (selectedIndex >= 0 && selectedIndex < static_cast<int>(cachedSaves.size())) {
+        return cachedSaves[selectedIndex];
     }
     return nullptr;
 }
@@ -341,8 +340,25 @@ void pksm::layout::TitleLoadScreen::TransitionToButtons() {
 }
 
 void pksm::layout::TitleLoadScreen::OnInput(u64 down, u64 up, u64 held) {
+    (void)up;
+
     if (HandleHelpInput(down)) {
-        return;  // Input was handled by help system
+        return;
+    }
+
+    if (isEmuReconfigConfirmVisible) {
+        if (down & HidNpadButton_A) {
+            HideEmuReconfigConfirm();
+            if (this->onReconfigureEmuSaves) {
+                this->onReconfigureEmuSaves();
+            }
+            return;
+        }
+        if (down & HidNpadButton_B) {
+            HideEmuReconfigConfirm();
+            return;
+        }
+        return;
     }
 
     if (down & HidNpadButton_Plus) {
@@ -350,6 +366,11 @@ void pksm::layout::TitleLoadScreen::OnInput(u64 down, u64 up, u64 held) {
         if (this->onExitRequested) {
             this->onExitRequested();
         }
+        return;
+    }
+
+    if (down & HidNpadButton_ZR) {
+        ShowEmuReconfigConfirm();
         return;
     }
 
@@ -362,6 +383,87 @@ void pksm::layout::TitleLoadScreen::OnInput(u64 down, u64 up, u64 held) {
     } else if (gameList->IsFocused()) {
         gameListDirectionalHandler.HandleInput(down, held);
     }
+}
+
+void pksm::layout::TitleLoadScreen::ShowEmuReconfigConfirm() {
+    if (isEmuReconfigConfirmVisible) {
+        return;
+    }
+
+    auto confirmOverlay = pu::ui::Overlay::New(0, 0, GetWidth(), GetHeight(), pu::ui::Color(0, 0, 0, 200));
+    confirmOverlay->SetRadius(0);
+    confirmOverlay->SetMaxFadeAlpha(200);
+    confirmOverlay->SetFadeAlphaVariation(18);
+
+    auto promptText = pu::ui::elm::TextBlock::New(0, 0, "Are you sure you want to reconfigure Emulator Saves?");
+    promptText->SetColor(pu::ui::Color(255, 255, 255, 255));
+    promptText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_TITLE));
+
+    auto aGlyph = pu::ui::elm::TextBlock::New(
+        0,
+        0,
+        pksm::ui::global::GetButtonGlyphString(pksm::ui::global::ButtonGlyph::A)
+    );
+    aGlyph->SetColor(pu::ui::Color(255, 255, 255, 255));
+    aGlyph->SetFont(pksm::ui::global::MakeSwitchButtonFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+    auto confirmText = pu::ui::elm::TextBlock::New(0, 0, "Confirm");
+    confirmText->SetColor(pu::ui::Color(255, 255, 255, 255));
+    confirmText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
+    auto bGlyph = pu::ui::elm::TextBlock::New(
+        0,
+        0,
+        pksm::ui::global::GetButtonGlyphString(pksm::ui::global::ButtonGlyph::B)
+    );
+    bGlyph->SetColor(pu::ui::Color(255, 255, 255, 255));
+    bGlyph->SetFont(pksm::ui::global::MakeSwitchButtonFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+    auto cancelText = pu::ui::elm::TextBlock::New(0, 0, "Cancel");
+    cancelText->SetColor(pu::ui::Color(255, 255, 255, 255));
+    cancelText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
+
+    const pu::i32 promptX = (GetWidth() - promptText->GetWidth()) / 2;
+    const pu::i32 promptY = (GetHeight() - promptText->GetHeight()) / 2;
+    promptText->SetX(promptX);
+    promptText->SetY(promptY);
+
+    static constexpr pu::i32 promptGap = 12;
+    static constexpr pu::i32 groupGap = 40;
+    const pu::i32 aGroupW = aGlyph->GetWidth() + promptGap + confirmText->GetWidth();
+    const pu::i32 bGroupW = bGlyph->GetWidth() + promptGap + cancelText->GetWidth();
+    const pu::i32 promptsW = aGroupW + groupGap + bGroupW;
+    const pu::i32 promptsX = (GetWidth() - promptsW) / 2;
+    const pu::i32 promptsY = promptY + promptText->GetHeight() + 40;
+
+    aGlyph->SetX(promptsX);
+    aGlyph->SetY(promptsY);
+    confirmText->SetX(promptsX + aGlyph->GetWidth() + promptGap);
+    confirmText->SetY(promptsY);
+
+    const pu::i32 bStartX = promptsX + aGroupW + groupGap;
+    bGlyph->SetX(bStartX);
+    bGlyph->SetY(promptsY);
+    cancelText->SetX(bStartX + bGlyph->GetWidth() + promptGap);
+    cancelText->SetY(promptsY);
+
+    confirmOverlay->Add(promptText);
+    confirmOverlay->Add(aGlyph);
+    confirmOverlay->Add(confirmText);
+    confirmOverlay->Add(bGlyph);
+    confirmOverlay->Add(cancelText);
+
+    emuReconfigConfirmOverlay = confirmOverlay;
+    onShowOverlay(confirmOverlay);
+    isEmuReconfigConfirmVisible = true;
+}
+
+void pksm::layout::TitleLoadScreen::HideEmuReconfigConfirm() {
+    if (!isEmuReconfigConfirmVisible) {
+        return;
+    }
+
+    onHideOverlay();
+    emuReconfigConfirmOverlay = nullptr;
+    isEmuReconfigConfirmVisible = false;
 }
 
 void pksm::layout::TitleLoadScreen::OnLoadButtonClick() {
@@ -386,7 +488,6 @@ void pksm::layout::TitleLoadScreen::OnWirelessButtonClick() {
 void pksm::layout::TitleLoadScreen::OnSaveSelected() {
     LOG_DEBUG("Save selected: " + saveList->GetSelectedItemText());
 }
-
 void pksm::layout::TitleLoadScreen::OnGameTouchSelect() {
     LOG_DEBUG("Game selected via touch");
 }
@@ -419,7 +520,8 @@ std::vector<pksm::ui::HelpItem> pksm::layout::TitleLoadScreen::GetHelpOverlayIte
 
     helpItems.insert(
         helpItems.end(),
-        {{{{pksm::ui::global::ButtonGlyph::L, pksm::ui::global::ButtonGlyph::R}}, "Change Game List"},
+        {{{{pksm::ui::global::ButtonGlyph::ZR}}, "Reconfigure Emulator Saves"},
+         {{{pksm::ui::global::ButtonGlyph::L, pksm::ui::global::ButtonGlyph::R}}, "Change Game List"},
          {{{pksm::ui::global::ButtonGlyph::AnalogStick, pksm::ui::global::ButtonGlyph::DPad}}, "Navigate"},
          {{{pksm::ui::global::ButtonGlyph::Minus}}, "Close Help"}}
     );

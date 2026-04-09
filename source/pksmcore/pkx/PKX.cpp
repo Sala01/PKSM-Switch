@@ -775,15 +775,16 @@ namespace pksm
                     partylen = PB7::PARTY_LENGTH;
                     break;
                 case Generation::EIGHT:
-                    // Gen8 has multiple formats (SWSH PK8, PLA PA8). Use length heuristics.
-                    if (getLength() == PA8::BOX_LENGTH)
+                    // Gen8 has multiple formats (SWSH PK8, PLA PA8).
+                    // Must dispatch by type since getPKM(generation) defaults to PK8.
+                    if (extension() == ".pa8")
                     {
-                        partylen = PA8::PARTY_LENGTH;
+                        auto ret = PKX::getPKM<PA8>(nullptr, PA8::PARTY_LENGTH);
+                        std::copy(data, data + getLength(), ret->rawData().data());
+                        ret->updatePartyData();
+                        return ret;
                     }
-                    else
-                    {
-                        partylen = PK8::PARTY_LENGTH;
-                    }
+                    partylen = PK8::PARTY_LENGTH;
                     break;
                 case Generation::NINE:
                     // Gen9 has multiple formats (SV PK9, ZA PA9) with identical sizes.

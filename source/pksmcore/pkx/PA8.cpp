@@ -72,7 +72,7 @@ namespace pksm
 
     bool PA8::isEncrypted() const
     {
-        return LittleEndian::convertTo<u16>(data + 0x78) != 0 &&
+        return LittleEndian::convertTo<u16>(data + 0x78) != 0 ||
                LittleEndian::convertTo<u16>(data + 0x128) != 0;
     }
 

@@ -62,6 +62,87 @@ namespace
         }
         return set;
     }
+
+    // Build a Move set from a consecutive range, excluding dummied moves marked in a bitflag array.
+    // Matches PKHeX's MoveInfo DummiedMoves convention: bit set (1) = move is dummied/invalid.
+    inline std::set<pksm::Move> create_set_excluding_dummied(
+        pksm::Move maxMove, const u8* dummied, size_t dummiedSize)
+    {
+        std::set<pksm::Move> set;
+        for (u16 i = 0; i <= u16(maxMove); i++)
+        {
+            size_t byteIdx = i >> 3;
+            u8 bitIdx      = i & 7;
+            bool isDummied  = (byteIdx < dummiedSize) && ((dummied[byteIdx] & (1 << bitIdx)) != 0);
+            if (!isDummied)
+            {
+                set.insert(pksm::Move{i});
+            }
+        }
+        return set;
+    }
+
+    // PKHeX DummiedMoves bitflag arrays (from external/PKHeX.Core/Moves/MoveInfo*.cs)
+    // Bit set = move is dummied (not usable in that game)
+
+    // SWSH (Gen 8) — MoveInfo8.cs
+    constexpr u8 DummiedMoves_SWSH[] = {
+        0x1C, 0x20, 0x00, 0x0C, 0x00, 0x02, 0x02, 0x00, 0x00, 0x00,
+        0x04, 0x00, 0x09, 0x00, 0xA1, 0x22, 0x19, 0x10, 0x36, 0xC0,
+        0x40, 0x0A, 0x00, 0x02, 0x02, 0x00, 0x00, 0x45, 0x10, 0x20,
+        0x00, 0x00, 0x00, 0x02, 0x04, 0x80, 0x66, 0x70, 0x00, 0x50,
+        0x91, 0x00, 0x00, 0x04, 0x64, 0x08, 0x20, 0x67, 0x84, 0x00,
+        0x00, 0x00, 0x00, 0xA4, 0x00, 0x28, 0x03, 0x01, 0x07, 0x20,
+        0x22, 0x00, 0x04, 0x08, 0x10, 0x00, 0x08, 0x02, 0x08, 0x00,
+        0x08, 0x02, 0x00, 0x00, 0x02, 0x01, 0x00, 0xE2, 0xFF, 0xFF,
+        0xFF, 0xFF, 0x07, 0x82, 0x01, 0x40, 0x84, 0xFF, 0x00, 0x80,
+        0xF8, 0xFF, 0x3F,
+    };
+
+    // PLA (Gen 8a) — MoveInfo8a.cs
+    constexpr u8 DummiedMoves_PLA[] = {
+        0x7E, 0xBC, 0xFE, 0xFF, 0xBD, 0xEA, 0xCF, 0x72, 0x7F, 0x1F,
+        0x0E, 0x1F, 0xAB, 0xFD, 0xEF, 0xBE, 0x7D, 0xD7, 0x35, 0xCF,
+        0xD5, 0xEF, 0x5F, 0x0F, 0xEF, 0x9E, 0xFD, 0xFF, 0x7E, 0x5F,
+        0x3B, 0xFD, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xDF, 0xBF, 0xB3,
+        0xBF, 0xAF, 0xF5, 0xE4, 0xF6, 0xFF, 0xFB, 0xFF, 0xFF, 0x2B,
+        0x84, 0x8C, 0x08, 0xA0, 0xDB, 0xAA, 0xC5, 0x21, 0xF0, 0xFB,
+        0xFF, 0xF7, 0xFF, 0xFB, 0xFF, 0xF3, 0xFE, 0xBF, 0xFF, 0xE7,
+        0xFF, 0xFF, 0x7D, 0xFC, 0xF7, 0xDF, 0xFE, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xB7, 0xFF, 0xFF, 0xFF, 0xFF, 0xBF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF,
+        0xFF, 0xFF, 0xFF, 0x07,
+    };
+
+    // SV (Gen 9) — MoveInfo9.cs
+    constexpr u8 DummiedMoves_SV[] = {
+        0x1C, 0x20, 0x00, 0x0C, 0x00, 0x02, 0x02, 0x00, 0x04, 0x00,
+        0x04, 0x00, 0x09, 0x00, 0xA1, 0x22, 0x5D, 0x50, 0x36, 0xC8,
+        0x00, 0x0E, 0x00, 0x42, 0x02, 0x00, 0x00, 0x45, 0x10, 0x22,
+        0x00, 0x00, 0x04, 0x0A, 0xA4, 0x80, 0x27, 0x70, 0x00, 0x51,
+        0x91, 0x00, 0x00, 0x04, 0x60, 0x08, 0xA0, 0x67, 0x04, 0x00,
+        0x00, 0x00, 0x00, 0xA4, 0x00, 0x28, 0x01, 0x01, 0x04, 0x28,
+        0x23, 0x00, 0x04, 0x08, 0x10, 0x00, 0x0C, 0x83, 0x07, 0x00,
+        0x8A, 0x02, 0x4C, 0x10, 0x80, 0x03, 0xF0, 0xC3, 0xFF, 0xFF,
+        0xFF, 0xFF, 0x07, 0x80, 0x26, 0xA0, 0x80, 0xFF, 0x11, 0xE1,
+        0xFB, 0xFF, 0xFF, 0x00, 0xEE, 0xFF, 0x7F, 0x08, 0x00, 0x0D,
+    };
+
+    // Z-A (Gen 9a) — MoveInfo9a.cs
+    constexpr u8 DummiedMoves_ZA[] = {
+        0x2E, 0x9C, 0xB0, 0xDF, 0x29, 0x02, 0x0E, 0x40, 0x7E, 0x01,
+        0x04, 0x00, 0x29, 0xC8, 0xA1, 0x3A, 0xD9, 0x59, 0x37, 0xD5,
+        0xE0, 0xAF, 0x3E, 0x6F, 0xC6, 0x02, 0xF5, 0x77, 0x7C, 0x62,
+        0x1B, 0xE8, 0x55, 0xCF, 0xFD, 0xFA, 0x7F, 0xF4, 0xE4, 0x15,
+        0xDF, 0x80, 0xC1, 0xA4, 0xFE, 0xFF, 0xF9, 0xFD, 0xBF, 0x2A,
+        0x02, 0x80, 0x08, 0xA4, 0x83, 0xA1, 0xC7, 0x79, 0xFA, 0xFD,
+        0xEA, 0xF2, 0x7F, 0xDF, 0xFF, 0x25, 0x48, 0xAB, 0xE3, 0xE7,
+        0x2E, 0x13, 0x7C, 0x68, 0xA0, 0xDD, 0x05, 0xC0, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xE7, 0x9D, 0x7F, 0x7F, 0xDF, 0xFF, 0xA9, 0xFE,
+        0xFD, 0xFF, 0xBF, 0xEF, 0xFD, 0xFF, 0xFF, 0x7F, 0xFA, 0x6B,
+        0xFE, 0x0F, 0xFF, 0xBF, 0x7F, 0xFF, 0xBF, 0xBA, 0xFA, 0xFB,
+        0x9E, 0xD1, 0xFF, 0xFF, 0xFF,
+    };
 }
 
 namespace pksm
@@ -236,8 +317,41 @@ namespace pksm
             }
             case GameVersion::PLA:
             {
-                static const std::set<int> items =
-                    std::invoke([]() { return create_set_consecutive<int>(0, 1828); });
+                static const std::set<int> items = {
+                    // Normal Items and PC Items
+                    17, 23, 24, 25, 26, 27, 28, 29, 39, 41,
+                    50, 54, 72, 73, 75, 80, 81, 82, 83, 84,
+                    85, 90, 91, 92, 107, 108, 109, 110, 149, 150,
+                    151, 152, 153, 154, 155, 157, 158, 159, 160, 161,
+                    162, 163, 164, 166, 168, 233, 252, 321, 322, 323,
+                    324, 325, 326, 327, 583,      849,
+                    1125, 1126, 1127, 1128, 1231, 1232, 1233, 1234, 1235, 1236,
+                    1237, 1238, 1239, 1240, 1241, 1242, 1243, 1244, 1245, 1246,
+                    1247, 1248, 1249, 1250, 1251,
+                    1611, 1613, 1614, 1615, 1616, 1617, 1618, 1619, 1620, 1621,
+                    1628, 1630, 1631, 1632, 1633, 1634, 1635, 1636, 1637, 1638,
+                    1651, 1679, 1681, 1682, 1684, 1686, 1687, 1688, 1689, 1690,
+                    1691, 1692, 1693, 1694, 1695, 1696, 1699, 1700, 1701, 1702,
+                    1703, 1704, 1705, 1706, 1707, 1708, 1709, 1710, 1711, 1712,
+                    1713, 1716, 1717, 1720, 1724, 1725, 1726, 1727, 1728, 1732,
+                    1733, 1734, 1735, 1736, 1738, 1739, 1740, 1741, 1742, 1746,
+                    1747, 1748, 1749, 1750, 1754, 1755, 1756, 1757, 1758, 1759,
+                    1760, 1761, 1762, 1764, 1785,
+                    // Key Items
+                    111,
+                    298, 299,
+                    300, 301, 302, 303, 304, 305, 306, 307, 308, 309,
+                    310, 311, 312, 313,
+                    441, 455, 466,
+                    632, 638, 644,
+                    1608, 1609, 1610, 1612, 1622, 1624, 1625, 1626, 1627, 1629,
+                    1639, 1678, 1721, 1722, 1723, 1737, 1743, 1744, 1745, 1763,
+                    1765, 1766, 1767, 1768, 1769, 1771, 1776, 1777, 1778, 1779,
+                    1780, 1782, 1786, 1787, 1788, 1789, 1790, 1792, 1793, 1794,
+                    1795, 1796, 1797, 1798, 1799, 1800, 1801, 1802, 1803, 1804,
+                    1805, 1806, 1807,
+                    1828,
+                };
                 return items;
             }
             case GameVersion::SL:
@@ -446,26 +560,30 @@ namespace pksm
             case GameVersion::SH:
             {
                 static const std::set<Move> items = std::invoke(
-                    []() { return create_set_consecutive<Move>(Move::None, Move::EerieSpell); });
+                    []() { return create_set_excluding_dummied(
+                        Move::EerieSpell, DummiedMoves_SWSH, sizeof(DummiedMoves_SWSH)); });
                 return items;
             }
             case GameVersion::PLA:
             {
                 static const std::set<Move> items = std::invoke(
-                    []() { return create_set_consecutive<Move>(Move::None, Move::TakeHeart); });
+                    []() { return create_set_excluding_dummied(
+                        Move::TakeHeart, DummiedMoves_PLA, sizeof(DummiedMoves_PLA)); });
                 return items;
             }
             case GameVersion::SL:
             case GameVersion::VL:
             {
                 static const std::set<Move> items = std::invoke(
-                    []() { return create_set_consecutive<Move>(Move::None, Move::MalignantChain); });
+                    []() { return create_set_excluding_dummied(
+                        Move::MalignantChain, DummiedMoves_SV, sizeof(DummiedMoves_SV)); });
                 return items;
             }
             case GameVersion::ZA:
             {
                 static const std::set<Move> items = std::invoke(
-                    []() { return create_set_consecutive<Move>(Move::None, Move::NihilLight); });
+                    []() { return create_set_excluding_dummied(
+                        Move::NihilLight, DummiedMoves_ZA, sizeof(DummiedMoves_ZA)); });
                 return items;
             }
             default:

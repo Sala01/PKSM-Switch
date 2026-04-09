@@ -7,6 +7,8 @@
 #include "data/saves/SaveData.hpp"
 #include "pksmcore/enums/Language.hpp"
 #include "pksmcore/utils/i18n.hpp"
+#include "pksmcore/utils/VersionTables.hpp"
+#include <set>
 
 namespace pksm::layout {
 
@@ -19,7 +21,11 @@ BagScreen::BagScreen(
   : BaseLayout(onShowOverlay, onHideOverlay),
     saveDataAccessor(std::move(saveDataAccessor)),
     onBack(onBack),
-    buttonHandler() {
+    buttonHandler(),
+    isAddItemOverlayVisible(false),
+    addItemOverlay(nullptr),
+    addItemList(nullptr),
+    addItemIds() {
     
     LOG_DEBUG("Initializing BagScreen...");
 
@@ -173,6 +179,26 @@ void BagScreen::OnInput(u64 down, u64 up, u64 held) {
         return;
     }
 
+    if (isAddItemOverlayVisible) {
+        if (!addItemList) {
+            HideAddItemOverlay();
+            return;
+        }
+
+        if (down & HidNpadButton_B) {
+            HideAddItemOverlay();
+            return;
+        }
+
+        if (down & HidNpadButton_A) {
+            ConfirmAddSelectedItem();
+            return;
+        }
+
+        addItemList->OnInput(down, up, held, pu::ui::TouchPoint());
+        return;
+    }
+
     if (down & HidNpadButton_B) {
         if (currentCategory == -1) {
             LOG_DEBUG("B button pressed, returning to main menu");
@@ -182,6 +208,11 @@ void BagScreen::OnInput(u64 down, u64 up, u64 held) {
         } else {
             ShowCategory(-1);
         }
+        return;
+    }
+
+    if ((currentCategory != -1) && (down & HidNpadButton_X)) {
+        ShowAddItemOverlay();
         return;
     }
 
@@ -263,10 +294,13 @@ void BagScreen::BuildCategoriesForCurrentSave() {
         }
     }
 
+    const bool is_za = (version == pksm::saves::GameVersion::ZA);
+    const bool is_sv = (version == pksm::saves::GameVersion::SL) || (version == pksm::saves::GameVersion::VL);
+    const bool is_pla = (version == pksm::saves::GameVersion::PLA);
     const bool is_swsh = (version == pksm::saves::GameVersion::SW) || (version == pksm::saves::GameVersion::SH);
     const bool is_lgpe = (version == pksm::saves::GameVersion::GP) || (version == pksm::saves::GameVersion::GE);
-    const bool is_pla = (version == pksm::saves::GameVersion::PLA);
-    const bool is_za = (version == pksm::saves::GameVersion::ZA);
+    const bool is_gsc = (version == pksm::saves::GameVersion::GD) || (version == pksm::saves::GameVersion::SV) || (version == pksm::saves::GameVersion::C);
+    const bool is_rgby = (version == pksm::saves::GameVersion::RD) || (version == pksm::saves::GameVersion::GN) || (version == pksm::saves::GameVersion::BU) || (version == pksm::saves::GameVersion::YW);
 
     if (is_za) {
         categoryLabels = {
@@ -290,37 +324,29 @@ void BagScreen::BuildCategoriesForCurrentSave() {
             pksm::saves::BagPouch::Treasure,
             pksm::saves::BagPouch::KeyItem,
         };
-    } else if (is_pla) {
+    } else if (is_sv) {
         categoryLabels = {
             "Items",
             "Key Items",
+            "PC Items",
         };
 
         categoryPouches = {
             pksm::saves::BagPouch::NormalItem,
             pksm::saves::BagPouch::KeyItem,
+            pksm::saves::BagPouch::PCItem,
         };
-    } else if (is_lgpe) {
+    } else if (is_pla) {
         categoryLabels = {
-            "Medicine Pocket",
-            "TM Case",
-            "Candy Jar",
-            "Power-Up Pocket",
-            "Catching Pocket",
-            "Battle Pocket",
-            "Bag",
-            "Unused",
+            "Items",
+            "Key Items",
+            "PC Items",
         };
 
         categoryPouches = {
-            pksm::saves::BagPouch::Medicine,
-            pksm::saves::BagPouch::TM,
-            pksm::saves::BagPouch::Candy,
-            pksm::saves::BagPouch::ZCrystals,
-            pksm::saves::BagPouch::CatchingItem,
-            pksm::saves::BagPouch::Battle,
             pksm::saves::BagPouch::NormalItem,
-            pksm::saves::BagPouch::Unknown,
+            pksm::saves::BagPouch::KeyItem,
+            pksm::saves::BagPouch::PCItem,
         };
     } else if (is_swsh) {
         categoryLabels = {
@@ -346,20 +372,66 @@ void BagScreen::BuildCategoriesForCurrentSave() {
             pksm::saves::BagPouch::Ingredient,
             pksm::saves::BagPouch::KeyItem,
         };
+    } else if (is_lgpe) {
+        categoryLabels = {
+            "Medicine",
+            "TMs/HMs",
+            "Candies",
+            "Power-Up Items",
+            "Catching Items",
+            "Battle Items",
+            "Items",
+        };
+
+        categoryPouches = {
+            pksm::saves::BagPouch::Medicine,
+            pksm::saves::BagPouch::TM,
+            pksm::saves::BagPouch::Candy,
+            pksm::saves::BagPouch::ZCrystals,
+            pksm::saves::BagPouch::CatchingItem,
+            pksm::saves::BagPouch::Battle,
+            pksm::saves::BagPouch::NormalItem,
+        };
+    } else if (is_gsc) {
+        categoryLabels = {
+            "TMs/HMs",
+            "Items",
+            "Key Items",
+            "Balls",
+            "PC Items",
+        };
+
+        categoryPouches = {
+            pksm::saves::BagPouch::TM,
+            pksm::saves::BagPouch::NormalItem,
+            pksm::saves::BagPouch::KeyItem,
+            pksm::saves::BagPouch::Ball,
+            pksm::saves::BagPouch::PCItem,
+        };
+    } else if (is_rgby) {
+        categoryLabels = {
+            "Items",
+            "PC Items",
+        };
+
+        categoryPouches = {
+            pksm::saves::BagPouch::NormalItem,
+            pksm::saves::BagPouch::PCItem,  
+        };
     } else {
         categoryLabels = {
             "Items",
         };
-
+ 
         categoryPouches = {
             pksm::saves::BagPouch::NormalItem,
         };
     }
 }
-
+ 
 void BagScreen::CreateCategoryButtons() {
     BuildCategoriesForCurrentSave();
-
+ 
     pu::i32 currentY = CATEGORY_TOP_MARGIN;
     for (size_t i = 0; i < MAX_CATEGORY_BUTTONS; i++) {
         auto button = pksm::ui::FocusableButton::New(
@@ -371,22 +443,22 @@ void BagScreen::CreateCategoryButtons() {
             pu::ui::Color(140, 110, 0, 200),
             pu::ui::Color(200, 160, 0, 255)
         );
-
+ 
         button->SetContentFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
         button->SetContentColor(pksm::ui::global::TEXT_WHITE);
         button->SetOnClick([this, idx = i]() {
             LOG_DEBUG("Category " + std::to_string(idx) + " clicked");
             ShowCategory(static_cast<int>(idx));
         });
-
+ 
         this->Add(button);
         categoryButtons.push_back(button);
         currentY += BUTTON_HEIGHT + BUTTON_SPACING;
     }
-
+ 
     RefreshCategories();
 }
-
+ 
 void BagScreen::CreateItemControls() {
     categoryHeaderText = pu::ui::elm::TextBlock::New(
         SIDE_MARGIN, 
@@ -397,7 +469,7 @@ void BagScreen::CreateItemControls() {
     categoryHeaderText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_HEADER));
     categoryHeaderText->SetVisible(false);
     this->Add(categoryHeaderText);
-
+ 
     itemNameText = pu::ui::elm::TextBlock::New(
         SIDE_MARGIN,
         ITEM_CONTROL_TOP_MARGIN,
@@ -407,7 +479,7 @@ void BagScreen::CreateItemControls() {
     itemNameText->SetFont(pksm::ui::global::MakeMediumFontName(pksm::ui::global::FONT_SIZE_BUTTON));
     itemNameText->SetVisible(false);
     this->Add(itemNameText);
-
+ 
     itemList = pksm::ui::FocusableMenu::New(
         SIDE_MARGIN,
         ITEM_CONTROL_TOP_MARGIN,
@@ -433,7 +505,7 @@ void BagScreen::CreateItemControls() {
     });
     bagScreenFocusManager->RegisterFocusable(itemList);
     this->Add(itemList);
-
+ 
     decreaseButton = pksm::ui::FocusableButton::New(
         SIDE_MARGIN,
         ITEM_CONTROL_TOP_MARGIN + 400,
@@ -448,7 +520,6 @@ void BagScreen::CreateItemControls() {
     decreaseButton->SetOnClick([this]() {
         if (currentItemQuantity > 0) {
             currentItemQuantity--;
-
             auto saveData = this->saveDataAccessor ? this->saveDataAccessor->getCurrentSaveData() : nullptr;
             if (saveData && itemList && !currentItemMap.empty()) {
                 const auto sel = itemList->GetSelectedIndex();
@@ -456,20 +527,27 @@ void BagScreen::CreateItemControls() {
                     const auto bag_idx = currentItemMap.at(static_cast<size_t>(sel));
                     const auto &items = saveData->getBagItems();
                     if (bag_idx < items.size()) {
-                        auto updated = items;
-                        updated.at(bag_idx).count = currentItemQuantity;
-                        saveData->setBagItems(std::move(updated));
-                        this->saveDataAccessor->markUnsavedChanges();
+                        const auto &item = items.at(bag_idx);
+                        const auto itemName = i18n::item(pksm::Language::ENG, item.itemId);
+                        const bool isMegaStone = !itemName.empty() && itemName.find("NAITO") != std::string::npos;
+                        const u16 maxQty = (saveData->getVersion() == pksm::saves::GameVersion::ZA && isMegaStone) ? 1 : 999;
+                        const u16 newQty = std::min(static_cast<u16>(currentItemQuantity), maxQty);
+                        if (newQty > 0) {
+                            auto updated = items;
+                            updated.at(bag_idx).count = newQty;
+                            saveData->setBagItems(std::move(updated));
+                            this->saveDataAccessor->markUnsavedChanges();
+                            currentItemQuantity = newQty;
+                        }
                     }
                 }
             }
-
             UpdateItemDisplay();
         }
     });
     decreaseButton->SetVisible(false);
     this->Add(decreaseButton);
-
+ 
     itemQuantityText = pu::ui::elm::TextBlock::New(
         SIDE_MARGIN + 120,
         ITEM_CONTROL_TOP_MARGIN + 425,
@@ -479,7 +557,7 @@ void BagScreen::CreateItemControls() {
     itemQuantityText->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_BUTTON));
     itemQuantityText->SetVisible(false);
     this->Add(itemQuantityText);
-
+ 
     increaseButton = pksm::ui::FocusableButton::New(
         SIDE_MARGIN + 340,
         ITEM_CONTROL_TOP_MARGIN + 400,
@@ -493,7 +571,6 @@ void BagScreen::CreateItemControls() {
     increaseButton->SetContentColor(pksm::ui::global::TEXT_WHITE);
     increaseButton->SetOnClick([this]() {
         currentItemQuantity++;
-
         auto saveData = this->saveDataAccessor ? this->saveDataAccessor->getCurrentSaveData() : nullptr;
         if (saveData && itemList && !currentItemMap.empty()) {
             const auto sel = itemList->GetSelectedIndex();
@@ -501,14 +578,21 @@ void BagScreen::CreateItemControls() {
                 const auto bag_idx = currentItemMap.at(static_cast<size_t>(sel));
                 const auto &items = saveData->getBagItems();
                 if (bag_idx < items.size()) {
-                    auto updated = items;
-                    updated.at(bag_idx).count = currentItemQuantity;
-                    saveData->setBagItems(std::move(updated));
-                    this->saveDataAccessor->markUnsavedChanges();
+                    const auto &item = items.at(bag_idx);
+                    const auto itemName = i18n::item(pksm::Language::ENG, item.itemId);
+                    const bool isMegaStone = !itemName.empty() && itemName.find("NAITO") != std::string::npos;
+                    const u16 maxQty = (saveData->getVersion() == pksm::saves::GameVersion::ZA && isMegaStone) ? 1 : 999;
+                    const u16 newQty = std::min(static_cast<u16>(currentItemQuantity), maxQty);
+                    if (newQty > 0) {
+                        auto updated = items;
+                        updated.at(bag_idx).count = newQty;
+                        saveData->setBagItems(std::move(updated));
+                        this->saveDataAccessor->markUnsavedChanges();
+                        currentItemQuantity = newQty;
+                    }
                 }
             }
         }
-
         UpdateItemDisplay();
     });
     increaseButton->SetVisible(false);
@@ -530,44 +614,272 @@ void BagScreen::CreateItemControls() {
     });
     backButton->SetVisible(false);
     this->Add(backButton);
-
+ 
     bagScreenFocusManager->RegisterFocusable(decreaseButton);
     bagScreenFocusManager->RegisterFocusable(increaseButton);
     bagScreenFocusManager->RegisterFocusable(backButton);
 }
+ 
+void BagScreen::ShowAddItemOverlay() {
+    if (isAddItemOverlayVisible) {
+        return;
+    }
+ 
+    addItemOverlay = pu::ui::Overlay::New(0, 0, GetWidth(), GetHeight(), pu::ui::Color(0, 0, 0, 200));
+    addItemOverlay->SetRadius(0);
+ 
+    auto title = pu::ui::elm::TextBlock::New(SIDE_MARGIN, HEADER_TOP_MARGIN, "Add Item");
+    title->SetColor(pksm::ui::global::TEXT_WHITE);
+    title->SetFont(pksm::ui::global::MakeHeavyFontName(pksm::ui::global::FONT_SIZE_TITLE));
+    addItemOverlay->Add(title);
+ 
+    addItemList = pksm::ui::FocusableMenu::New(
+        SIDE_MARGIN,
+        CATEGORY_TOP_MARGIN,
+        1040,
+        pu::ui::Color(40, 40, 40, 220),
+        pu::ui::Color(80, 80, 80, 255),
+        70,
+        8
+    );
+    addItemList->SetFocused(true);
+    addItemList->SetOnCancel([this]() { this->HideAddItemOverlay(); });
+    addItemOverlay->Add(addItemList);
+ 
+    RefreshAddItemListForCurrentCategory();
+ 
+    onShowOverlay(addItemOverlay);
+    isAddItemOverlayVisible = true;
+}
+ 
+void BagScreen::HideAddItemOverlay() {
+    if (!isAddItemOverlayVisible) {
+        return;
+    }
+ 
+    onHideOverlay();
+    isAddItemOverlayVisible = false;
+    addItemOverlay = nullptr;
+    addItemList = nullptr;
+    addItemIds.clear();
+ 
+    if (itemList && (currentCategory != -1)) {
+        itemList->SetFocused(true);
+        itemList->RequestFocus();
+    }
+}
+ 
+void BagScreen::RefreshAddItemListForCurrentCategory() {
+    addItemIds.clear();
+    if (!addItemList) {
+        return;
+    }
 
+    if (!saveDataAccessor) {
+        addItemList->SetDataSource({"No save loaded"});
+        return;
+    }
+
+    auto saveData = saveDataAccessor->getCurrentSaveData();
+    if (!saveData) {
+        addItemList->SetDataSource({"No save loaded"});
+        return;
+    }
+
+    pksm::saves::BagPouch pouch = pksm::saves::BagPouch::Unknown;
+    if ((currentCategory >= 0) && (static_cast<size_t>(currentCategory) < categoryPouches.size())) {
+        pouch = categoryPouches.at(static_cast<size_t>(currentCategory));
+    }
+
+    std::set<u16> existing;
+    for (const auto &it : saveData->getBagItems()) {
+        if (it.pouch != pouch) {
+            continue;
+        }
+        existing.insert(it.itemId);
+    }
+
+    std::vector<std::string> names;
+    const auto toCoreVersion = [](pksm::saves::GameVersion v) -> pksm::GameVersion {
+        using GV = pksm::GameVersion;
+        using AGV = pksm::saves::GameVersion;
+
+        switch (v) {
+            case AGV::RD:
+                return GV::RD;
+            case AGV::GN:
+                return GV::GN;
+            case AGV::BU:
+                return GV::BU;
+            case AGV::YW:
+                return GV::YW;
+            case AGV::GD:
+                return GV::GD;
+            case AGV::SV:
+                return GV::SV;
+            case AGV::C:
+                return GV::C;
+            case AGV::R:
+                return GV::R;
+            case AGV::S:
+                return GV::S;
+            case AGV::E:
+                return GV::E;
+            case AGV::FR:
+                return GV::FR;
+            case AGV::LG:
+                return GV::LG;
+            case AGV::D:
+                return GV::D;
+            case AGV::P:
+                return GV::P;
+            case AGV::Pt:
+                return GV::Pt;
+            case AGV::HG:
+                return GV::HG;
+            case AGV::SS:
+                return GV::SS;
+            case AGV::W:
+                return GV::W;
+            case AGV::B:
+                return GV::B;
+            case AGV::W2:
+                return GV::W2;
+            case AGV::B2:
+                return GV::B2;
+            case AGV::X:
+                return GV::X;
+            case AGV::Y:
+                return GV::Y;
+            case AGV::OR:
+                return GV::OR;
+            case AGV::AS:
+                return GV::AS;
+            case AGV::SN:
+                return GV::SN;
+            case AGV::MN:
+                return GV::MN;
+            case AGV::US:
+                return GV::US;
+            case AGV::UM:
+                return GV::UM;
+            case AGV::GP:
+                return GV::GP;
+            case AGV::GE:
+                return GV::GE;
+            case AGV::SW:
+                return GV::SW;
+            case AGV::SH:
+                return GV::SH;
+            case AGV::PLA:
+                return GV::PLA;
+            case AGV::ZA:
+                return GV::ZA;
+            default:
+                return GV::SW;
+        }
+    };
+
+    const auto valid = pksm::VersionTables::availableItems(toCoreVersion(saveData->getVersion()));
+    for (const auto id_i : valid) {
+        const u16 id = static_cast<u16>(id_i);
+        if (id <= 0) {
+            continue;
+        }
+
+        if (existing.contains(id)) {
+            continue;
+        }
+
+        auto name = i18n::item(pksm::Language::ENG, id);
+        if (name.empty() || name == "None") {
+            continue;
+        }
+
+        addItemIds.push_back(id);
+        names.push_back(name);
+    }
+ 
+    if (names.empty()) {
+        addItemList->SetDataSource({"No missing items"});
+        addItemIds.clear();
+    } else {
+        addItemList->SetDataSource(names);
+    }
+}
+ 
+void BagScreen::ConfirmAddSelectedItem() {
+    if (!saveDataAccessor) {
+        return;
+    }
+ 
+    auto saveData = saveDataAccessor->getCurrentSaveData();
+    if (!saveData) {
+        return;
+    }
+ 
+    if (!addItemList || addItemIds.empty()) {
+        return;
+    }
+ 
+    const auto sel = addItemList->GetSelectedIndex();
+    if ((sel < 0) || (static_cast<size_t>(sel) >= addItemIds.size())) {
+        return;
+    }
+ 
+    pksm::saves::BagPouch pouch = pksm::saves::BagPouch::Unknown;
+    if ((currentCategory >= 0) && (static_cast<size_t>(currentCategory) < categoryPouches.size())) {
+        pouch = categoryPouches.at(static_cast<size_t>(currentCategory));
+    }
+    if (pouch == pksm::saves::BagPouch::Unknown) {
+        return;
+    }
+ 
+    const auto id = addItemIds.at(static_cast<size_t>(sel));
+ 
+    auto updated = saveData->getBagItems();
+    updated.push_back(pksm::saves::BagItem{pouch, id, 1});
+    saveData->setBagItems(std::move(updated));
+    saveDataAccessor->markUnsavedChanges();
+ 
+    HideAddItemOverlay();
+    RefreshItemListForCurrentCategory();
+    UpdateItemDisplay();
+}
+ 
 void BagScreen::ShowCategory(int categoryIndex) {
     currentCategory = categoryIndex;
     currentItemIndex = 0;
-
+ 
     if (categoryIndex >= 0 && categoryIndex < static_cast<int>(categoryLabels.size())) {
         for (auto& button : categoryButtons) {
             button->SetVisible(false);
         }
-        
+ 
         categoryHeaderText->SetText(categoryLabels[categoryIndex]);
         categoryHeaderText->SetVisible(true);
-        
+ 
         itemNameText->SetVisible(false);
-
+ 
         itemList->SetVisible(true);
         itemList->SetFocused(true);
-
+ 
         decreaseButton->SetVisible(true);
         increaseButton->SetVisible(true);
         itemQuantityText->SetVisible(true);
         backButton->SetVisible(true);
-
+ 
         RefreshItemListForCurrentCategory();
-        
+ 
         UpdateItemDisplay();
-        
+ 
         itemList->RequestFocus();
-        
+ 
         std::vector<pksm::ui::HelpItem> helpItems = {
             {{{pksm::ui::global::ButtonGlyph::A}}, "Adjust Quantity"},
             {{{pksm::ui::global::ButtonGlyph::B}}, "Back to Main Menu"},
             {{{pksm::ui::global::ButtonGlyph::DPad}}, "Navigate Controls"},
+            {{{pksm::ui::global::ButtonGlyph::X}}, "Add Item"},
         };
         helpFooter->SetHelpItems(helpItems);
     } else {
@@ -579,13 +891,13 @@ void BagScreen::ShowCategory(int categoryIndex) {
         increaseButton->SetVisible(false);
         itemQuantityText->SetVisible(false);
         backButton->SetVisible(false);
-        
+ 
         for (auto& button : categoryButtons) {
             button->SetVisible(true);
         }
-
+ 
         RefreshCategories();
-        
+ 
         std::vector<pksm::ui::HelpItem> helpItems = {
             {{{pksm::ui::global::ButtonGlyph::A}}, "Select Category"},
             {{{pksm::ui::global::ButtonGlyph::B}}, "Back to Main Menu"},
@@ -594,10 +906,10 @@ void BagScreen::ShowCategory(int categoryIndex) {
         helpFooter->SetHelpItems(helpItems);
     }
 }
-
+ 
 void BagScreen::RefreshItemListForCurrentCategory() {
     currentItemMap.clear();
-
+ 
     if (!itemList) {
         return;
     }
@@ -683,4 +995,4 @@ void BagScreen::UpdateItemDisplay() {
     itemQuantityText->SetText("x" + std::to_string(currentItemQuantity));
 }
 
-}  // namespace pksm::layout
+} // namespace pksm::layout

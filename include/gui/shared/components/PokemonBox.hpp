@@ -156,6 +156,9 @@ public:
     int GetSelectedSlot() const;
     void SetSelectedSlot(int slotIndex);
 
+    // Get screen position of the currently selected slot
+    std::pair<pu::i32, pu::i32> GetSelectedSlotScreenPosition() const;
+
     // Enable/disable
     void SetDisabled(bool disabled);
 
@@ -168,6 +171,9 @@ public:
     // Optional chrome controls (used by Editor team panel)
     void SetNavigationControlsVisible(bool visible);
     void SetFooterControlsVisible(bool visible);
+
+    void SetTwentySlotMode(bool on);
+    [[nodiscard]] bool GetTwentySlotMode() const;
 };
 
 }  // namespace pksm::ui

@@ -9,6 +9,8 @@
 #include "data/titles/Title.hpp" // use the existing Title class
 #include "data/providers/interfaces/ITitleDataProvider.hpp"
 
+class CustomTitleProvider;
+
 namespace pksm::titles
 {
 
@@ -30,8 +32,9 @@ namespace pksm::titles
         std::vector<std::shared_ptr<Title>> installedTitles;
         std::vector<Title::Ref> customTitles;
 
-        Title::Ref mockCartridgeTitle;
-        std::vector<Title::Ref> mockEmulatorTitles;
+        std::shared_ptr<CustomTitleProvider> customTitleProvider;
+
+        std::vector<Title::Ref> emulatorTitles;
     };
 
 } // namespace pksm::titles

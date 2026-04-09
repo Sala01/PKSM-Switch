@@ -12,6 +12,3 @@ Makefile
 
 # vscode settings
 /.vscode/
-
-# my internal tools
-/tools/

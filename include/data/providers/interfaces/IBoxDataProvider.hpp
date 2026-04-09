@@ -88,4 +88,11 @@ public:
     virtual bool HasPendingWrites() const { return false; }
     virtual bool FlushPendingWrites() const { return true; }
     virtual void DiscardPendingWrites() const {}
+
+    // INTL Gen I/II saves hold 20 Pokemon per box
+    [[nodiscard]] virtual bool UsesTwentySlotBox(const pksm::saves::SaveData::Ref &saveData) const
+    {
+        (void)saveData;
+        return false;
+    }
 };

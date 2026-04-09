@@ -3,7 +3,6 @@
 #include <format>
 
 #include "gui/shared/UIConstants.hpp"
-#include "gui/shared/components/PokemonSummaryOverlay.hpp"
 #include "pksmcore/utils/i18n.hpp"
 #include "utils/Logger.hpp"
 #include "utils/NotificationManager.hpp"
@@ -374,7 +373,7 @@ EditorScreen::EditorScreen(
 
     // ── Selection callbacks → refresh info panel ────────────────────────────
     boxesPanel->SetOnSelectionChanged([this](int box, int slot) {
-        if (!suppressPanelSelectionSync && !actionOverlayVisible && !summaryOverlayVisible &&
+        if (!suppressPanelSelectionSync && !actionOverlayVisible &&
             !inlineEditOpen && !pokemonEditOverlayVisible && activePanel != ActivePanel::Boxes) {
             SetActivePanel(ActivePanel::Boxes);
             return;
@@ -387,7 +386,7 @@ EditorScreen::EditorScreen(
     });
 
     teamPanel->SetOnSelectionChanged([this](int /*box*/, int slot) {
-        if (!suppressPanelSelectionSync && !actionOverlayVisible && !summaryOverlayVisible &&
+        if (!suppressPanelSelectionSync && !actionOverlayVisible &&
             !inlineEditOpen && !pokemonEditOverlayVisible && activePanel != ActivePanel::Team) {
             SetActivePanel(ActivePanel::Team);
             return;
@@ -410,7 +409,6 @@ EditorScreen::EditorScreen(
         if (this->onBack) this->onBack();
     });
     buttonHandler.RegisterButton(HidNpadButton_A, nullptr, [this]() { HandlePrimaryAction(); });
-    buttonHandler.RegisterButton(HidNpadButton_Y, nullptr, [this]() { OpenSummaryOverlay(); });
     buttonHandler.RegisterButton(HidNpadButton_X, nullptr, [this]() {
         const auto nextPanel = (activePanel == ActivePanel::Boxes) ? ActivePanel::Team : ActivePanel::Boxes;
         SetActivePanel(nextPanel);
@@ -421,7 +419,6 @@ EditorScreen::EditorScreen(
     helpFooter->SetHelpItems({
         {{{pksm::ui::global::ButtonGlyph::DPad}},                                          "Navigate"},
         {{{pksm::ui::global::ButtonGlyph::A}},                                             "Action Menu"},
-        {{{pksm::ui::global::ButtonGlyph::Y}},                                             "Summary"},
         {{{pksm::ui::global::ButtonGlyph::X}},                                             "Switch Box/Team"},
         {{{pksm::ui::global::ButtonGlyph::L}, {pksm::ui::global::ButtonGlyph::R}},         "Switch Box"},
         {{{pksm::ui::global::ButtonGlyph::B}},                                             "Back"}
@@ -515,6 +512,7 @@ void EditorScreen::LoadData() {
 
     auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
     if (!saveData || !boxDataProvider) {
+        boxesPanel->SetTwentySlotMode(false);
         boxesPanel->SetBoxCount(1);
         pksm::ui::BoxData b("Box 1"); b.resize(30);
         boxesPanel->SetBoxData(0, b); boxesPanel->ForceRefreshCurrentBox();
@@ -529,6 +527,8 @@ void EditorScreen::LoadData() {
     // Preserve current box position across reloads (e.g. after edit/delete)
     const int prevBox  = boxesPanel->GetCurrentBox();
     const int prevSlot = boxesPanel->GetSelectedSlot();
+
+    boxesPanel->SetTwentySlotMode(boxDataProvider->UsesTwentySlotBox(saveData));
 
     const size_t boxCount = boxDataProvider->GetBoxCount(saveData);
     boxesPanel->SetBoxCount(boxCount);
@@ -596,10 +596,6 @@ void EditorScreen::LoadData() {
 
         if (missingSpriteCount > 0) {
             warnedMissingPartySprites = true;
-            utils::NotificationManager::Push(
-                "Sprites",
-                "Party loaded, but sprite files are missing"
-            );
             LOG_WARNING(
                 "[EditorScreen] Party sprites missing for " + std::to_string(missingSpriteCount) +
                 " slot(s)"
@@ -644,36 +640,8 @@ void EditorScreen::OpenActionMenu() {
     teamPanel->SetDisabled(true);
 }
 
-void EditorScreen::OpenSummaryOverlay() {
-    if (summaryOverlayVisible || actionOverlayVisible || inlineEditOpen || pokemonEditOverlayVisible) return;
-
-    auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
-    if (!saveData) return;
-
-    std::unique_ptr<pksm::PKX> pk;
-    if (activePanel == ActivePanel::Boxes && boxDataProvider) {
-        pk = boxDataProvider->GetPokemon(saveData, boxesPanel->GetCurrentBox(), boxesPanel->GetSelectedSlot());
-    } else if (activePanel == ActivePanel::Team && partyDataProvider) {
-        pk = partyDataProvider->GetPartyPokemon(saveData, teamPanel->GetSelectedSlot());
-    }
-
-    if (!pk || static_cast<int>(pk->species()) == 0) {
-        utils::NotificationManager::Push("Summary", "No Pokémon in this slot");
-        return;
-    }
-
-    auto overlay = pksm::ui::PokemonSummaryOverlay::New(0, 0, GetWidth(), GetHeight());
-    overlay->SetPokemon(std::move(pk));
-    this->onShowOverlay(overlay);
-    summaryOverlayVisible = true;
-
-    // Disable both panels while overlay is open
-    boxesPanel->SetDisabled(true);
-    teamPanel->SetDisabled(true);
-}
-
 void EditorScreen::OpenPokemonEditOverlay() {
-    if (pokemonEditOverlayVisible || actionOverlayVisible || summaryOverlayVisible || inlineEditOpen) {
+    if (pokemonEditOverlayVisible || actionOverlayVisible || inlineEditOpen) {
         return;
     }
 
@@ -691,11 +659,6 @@ void EditorScreen::OpenPokemonEditOverlay() {
         pk = boxDataProvider->GetPokemon(saveData, editBox, editSlot);
     } else if (editPanel == ActivePanel::Team && partyDataProvider) {
         pk = partyDataProvider->GetPartyPokemon(saveData, editSlot);
-    }
-
-    if (!pk || static_cast<int>(pk->species()) == 0) {
-        utils::NotificationManager::Push("Edit", "Slot empty");
-        return;
     }
 
     pokemonEditOverlay->SetPokemon(std::move(pk));
@@ -729,7 +692,7 @@ void EditorScreen::CommitPokemonEditOverlay() {
 
     ClosePokemonEditOverlay();
     LoadData();
-    utils::NotificationManager::Push("Edit", ok ? "Updated (press Y to save)" : "Save failed");
+    utils::NotificationManager::Push("Edit", ok ? "Pokemon Edited Succesfully" : "Pokemon Edit Failed");
 }
 
 void EditorScreen::ClosePokemonEditOverlay() {
@@ -800,10 +763,6 @@ void EditorScreen::OpenInlineEdit() {
         ? boxDataProvider->GetPokemon(saveData, editBox, editSlot)
         : partyDataProvider->GetPartyPokemon(saveData, editSlot);
 
-    if (!pk || static_cast<int>(pk->species()) == 0) {
-        utils::NotificationManager::Push("Edit", "Slot empty"); return;
-    }
-
     editSpecies = static_cast<int>(pk->species());
     editLevel   = std::max(1, std::min(100, (int)pk->level()));
     editShiny   = pk->shiny();
@@ -821,8 +780,6 @@ void EditorScreen::OpenInlineEdit() {
     // Show the field highlight and position it
     infoEditHighlight->SetVisible(true);
     UpdateEditHighlight();
-    // Show a notification hint
-    utils::NotificationManager::Push("Edit", "\xe2\x86\x91\xe2\x86\x93 field  \xe2\x86\x90\xe2\x86\x92 value  A save  B cancel");
 }
 
 void EditorScreen::HandleInlineEditInput(u64 down) {
@@ -877,7 +834,6 @@ void EditorScreen::CommitInlineEdit() {
         ? boxDataProvider->GetPokemon(saveData, editBox, editSlot)
         : partyDataProvider->GetPartyPokemon(saveData, editSlot);
     if (!pk || static_cast<int>(pk->species()) == 0) {
-        utils::NotificationManager::Push("Edit", "Cannot save empty");
         inlineEditOpen = false;
         infoEditHighlight->SetVisible(false);
         SetActivePanel(activePanel);
@@ -903,16 +859,16 @@ void EditorScreen::CommitInlineEdit() {
     infoEditHighlight->SetVisible(false);
     SetActivePanel(activePanel);
     LoadData();
-        utils::NotificationManager::Push("Edit", ok ? "Updated (press Y to save)" : "Save failed");
+        utils::NotificationManager::Push("Edit", ok ? "Pokemon Edited Succesfully" : "Pokemon Edit Failed");
 }
 
 void EditorScreen::ExecuteContextAction(ContextAction action) {
     auto saveData = saveDataAccessor ? saveDataAccessor->getCurrentSaveData() : nullptr;
     if (!boxDataProvider || !partyDataProvider) {
-        utils::NotificationManager::Push("Editor", "Providers not initialized"); return;
+        return;
     }
     if (!saveData) {
-        utils::NotificationManager::Push("Editor", "No save loaded"); return;
+        return;
     }
 
     const bool onBoxes = (activePanel == ActivePanel::Boxes);
@@ -926,7 +882,6 @@ void EditorScreen::ExecuteContextAction(ContextAction action) {
             ? boxDataProvider->ClearSlot(saveData, box, slot)
             : partyDataProvider->ClearPartySlot(saveData, slot);
         LoadData();
-        utils::NotificationManager::Push("Editor", ok ? "Deleted (press Y to save)" : "Delete failed");
         return;
     }
 
@@ -934,15 +889,11 @@ void EditorScreen::ExecuteContextAction(ContextAction action) {
         std::unique_ptr<pksm::PKX> src = onBoxes
             ? boxDataProvider->GetPokemon(saveData, box, slot)
             : partyDataProvider->GetPartyPokemon(saveData, slot);
-        if (!src || static_cast<int>(src->species()) == 0) {
-            utils::NotificationManager::Push("Editor", "Nothing to clone"); return;
-        }
         const int next = std::min(slot + 1, onBoxes ? 29 : 5);
         bool ok = onBoxes
             ? boxDataProvider->WritePokemon(saveData, box, next, *src)
             : partyDataProvider->WritePartyPokemon(saveData, next, *src);
         LoadData();
-        utils::NotificationManager::Push("Editor", ok ? "Cloned (press Y to save)" : "Clone failed");
         return;
     }
 
@@ -950,13 +901,11 @@ void EditorScreen::ExecuteContextAction(ContextAction action) {
     if (!grab.active) {
         grab = { true, activePanel, box, slot };
         titleText->SetText("Editor  \xe2\x9c\xa6 MOVING");  // visual grab indicator
-        utils::NotificationManager::Push("Editor", "Grabbed \xe2\x80\x94 navigate to target, then A");
         return;
     }
     if (grab.panel == activePanel && grab.slot == slot && (!onBoxes || grab.box == box)) {
         grab.active = false;
         titleText->SetText("Editor");
-        utils::NotificationManager::Push("Editor", "Move cancelled");
         return;
     }
 
@@ -989,7 +938,6 @@ void EditorScreen::ExecuteContextAction(ContextAction action) {
     grab.active = false;
     titleText->SetText("Editor");
     LoadData();
-    utils::NotificationManager::Push("Editor", ok ? "Swapped (press Y to save)" : "Swap failed");
 }
 
 // ─── Primary action ────────────────────────────────────────────────────────────
@@ -1008,7 +956,6 @@ void EditorScreen::HandlePrimaryAction() {
             actionOverlayVisible = false;
             SetActivePanel(activePanel);
             grab.active = false;
-            utils::NotificationManager::Push("Editor", "Move cancelled");
             return;
         }
 
@@ -1026,7 +973,7 @@ void EditorScreen::HandlePrimaryAction() {
 
 void EditorScreen::SetActivePanel(ActivePanel panel) {
     // Don't switch panels while an overlay or inline editor is open
-    if (actionOverlayVisible || summaryOverlayVisible || inlineEditOpen || pokemonEditOverlayVisible) return;
+    if (actionOverlayVisible || inlineEditOpen || pokemonEditOverlayVisible) return;
 
     activePanel = panel;
     const bool boxes = (activePanel == ActivePanel::Boxes);
@@ -1058,7 +1005,7 @@ void EditorScreen::OnInput(u64 down, u64 up, u64 held) {
     if (pokemonEditOverlayVisible) {
         if (down & HidNpadButton_B) {
             ClosePokemonEditOverlay();
-            utils::NotificationManager::Push("Edit", "Cancelled");
+            utils::NotificationManager::Push("Edit", "Cancelled Pokemon Edit");
             return;
         }
         if (down & HidNpadButton_Up) {
@@ -1089,23 +1036,12 @@ void EditorScreen::OnInput(u64 down, u64 up, u64 held) {
         return;
     }
 
-    // Summary overlay — any button dismisses it
-    if (summaryOverlayVisible) {
-        if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Y)) {
-            this->onHideOverlay();
-            summaryOverlayVisible = false;
-            SetActivePanel(activePanel);
-        }
-        return;
-    }
-
     // Inline field editor
     if (inlineEditOpen) {
         if (down & HidNpadButton_B) {
             inlineEditOpen = false;
             infoEditHighlight->SetVisible(false);
             SetActivePanel(activePanel);
-            utils::NotificationManager::Push("Edit", "Cancelled");
             return;
         }
         if (down & HidNpadButton_A) { CommitInlineEdit(); return; }
@@ -1136,7 +1072,6 @@ std::vector<pksm::ui::HelpItem> EditorScreen::GetHelpOverlayItems() const {
     return {
         {{{pksm::ui::global::ButtonGlyph::DPad}},                                   "Navigate slots"},
         {{{pksm::ui::global::ButtonGlyph::A}},                                      "Open action menu"},
-        {{{pksm::ui::global::ButtonGlyph::Y}},                                      "Pokémon summary"},
         {{{pksm::ui::global::ButtonGlyph::X}},                                      "Switch Box/Team"},
         {{{pksm::ui::global::ButtonGlyph::L}, {pksm::ui::global::ButtonGlyph::R}},  "Switch Box"},
         {{{pksm::ui::global::ButtonGlyph::B}},                                      "Back to Main Menu"}

@@ -57,7 +57,7 @@ namespace pksm
         SavLGPE(const std::shared_ptr<u8[]>& dt, size_t length);
         void resign(void);
 
-        void finishEditing(void) override { resign(); }
+        void finishEditing(void) override;
 
         void beginEditing(void) override {}
 

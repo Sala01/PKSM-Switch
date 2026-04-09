@@ -1,18 +1,53 @@
 #include "TitleDataProvider.hpp"
+#include "data/providers/CustomTitleProvider.hpp"
 #include <fstream>
 #include <filesystem>
 #include <set>
 #include <vector>
 #include <cstring>
+
 #include <stdio.h>
 
 #include <switch.h>
 
 #include <nlohmann/json.hpp>
 
+#include "data/emulator/EmulatorGameCatalog.hpp"
+#include "data/emulator/EmulatorSaveConfig.hpp"
+
 namespace pksm::titles {
 
 static constexpr const char* JSON_PATH = "romfs:/gfx/data/data.json";
+
+namespace {
+
+bool PathExists(const std::string& path) {
+    std::error_code ec;
+    return std::filesystem::exists(std::filesystem::path(path), ec) && !ec;
+}
+
+bool AnyPathExists(const std::vector<std::string>& paths) {
+    for (const auto& p : paths) {
+        if (PathExists(p)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool AnyConfiguredPathExists(const pksm::data::emulator::EmulatorSaveSelection& sel) {
+    if (AnyPathExists(sel.primary)) {
+        return true;
+    }
+    for (const auto& kv : sel.extra) {
+        if (AnyPathExists(kv.second)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}
 
 unsigned long long TitleDataProvider::GetInsertedGameCardID() const {
     Result rc = ncmInitialize();
@@ -95,8 +130,8 @@ void TitleDataProvider::GetInstalledApplicationIds(std::set<u64>& out_ids) const
 }
 
 TitleDataProvider::TitleDataProvider()
-    : mockCartridgeTitle(nullptr)
 {
+    customTitleProvider = CustomTitleProvider::New();
     try {
         std::ifstream f(JSON_PATH);
         if (f.is_open()) {
@@ -122,13 +157,30 @@ TitleDataProvider::TitleDataProvider()
     }
 
     try {
-        // mock emulator titles replace later with REAL emu titles
-        mockEmulatorTitles.clear();
-        mockEmulatorTitles.push_back(std::make_shared<Title>("Pokémon Sun", "romfs:/gfx/mock/emulator/sun_menu_icon.jpg", 0x00180014));
-        mockEmulatorTitles.push_back(std::make_shared<Title>("Pokémon Ultra Moon", "romfs:/gfx/mock/emulator/ultra_moon_menu_icon.jpg", 0x00180015));
+        emulatorTitles.clear();
+
+        const auto games = pksm::data::emulator::EmulatorGameCatalog::LoadFromDataJson(JSON_PATH);
+        const auto saveCfg = pksm::data::emulator::EmulatorSaveConfig::Load();
+
+        for (const auto& g : games) {
+            if (g.titleId == 0) {
+                continue;
+            }
+
+            bool anySavePresent = AnyPathExists(g.saveProbes);
+            if (!anySavePresent) {
+                const auto it = saveCfg.find(g.titleId);
+                if (it != saveCfg.end()) {
+                    anySavePresent = AnyConfiguredPathExists(it->second);
+                }
+            }
+
+            if (anySavePresent) {
+                emulatorTitles.push_back(std::make_shared<Title>(g.name, g.iconPath, g.titleId));
+            }
+        }
     } catch (...) {
-        mockCartridgeTitle = nullptr;
-        mockEmulatorTitles.clear();
+        emulatorTitles.clear();
     }
 }
 
@@ -175,11 +227,14 @@ std::vector<Title::Ref> TitleDataProvider::GetInstalledTitles(const AccountUid& 
 }
 
 std::vector<Title::Ref> TitleDataProvider::GetEmulatorTitles() const {
-    return mockEmulatorTitles;
+    return emulatorTitles;
 }
 
 std::vector<Title::Ref> TitleDataProvider::GetCustomTitles() const {
-    return customTitles;
+    if (!customTitleProvider) {
+        return {};
+    }
+    return customTitleProvider->GetCustomTitles();
 }
 
 }

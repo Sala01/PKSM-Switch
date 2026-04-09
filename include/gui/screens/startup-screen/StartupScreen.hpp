@@ -31,11 +31,13 @@ namespace pksm::layout
         pu::ui::elm::Rectangle::Ref loadingBarFill;
 
         std::function<void()> onTimeout;
+        std::function<void()> onSkip;
         std::atomic<bool> completed;
 
     public:
         StartupScreen(
             std::function<void()> onTimeout,
+            std::function<void()> onSkip = nullptr,
             std::function<void(pu::ui::Overlay::Ref)> onShowOverlay = nullptr,
             std::function<void()> onHideOverlay = nullptr);
         PU_SMART_CTOR(StartupScreen)

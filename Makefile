@@ -17,7 +17,7 @@ TOPDIR ?= $(CURDIR)
 include $(DEVKITPRO)/libnx/switch_rules
 
 # Add debug build option
-DEBUG ?= 0
+DEBUG ?= 1
 
 #---------------------------------------------------------------------------------
 # TARGET is the name of the output
@@ -67,7 +67,7 @@ FIND_INCLUDES	:=	$(patsubst $(CURDIR)/%,%,$(FIND_INCLUDES))
 
 VER_MAJOR	:= 0
 VER_MINOR	:= 1
-VER_MICRO	:= 1
+VER_MICRO	:= 2
 
 APP_TITLE   := PKSM
 APP_AUTHOR  := FlagBrew, nicooo_dev, Insektaure
