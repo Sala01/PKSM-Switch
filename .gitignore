@@ -15,3 +15,6 @@ Makefile
 
 # my internal tools
 /tools/
+dist/
+*.nro
+*.elf
